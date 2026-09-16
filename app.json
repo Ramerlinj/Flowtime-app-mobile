@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "flowtime-app-mobile",
-    "slug": "flowtime-app-mobile",
+    "name": "FLowtime",
+    "slug": "FLowtime",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/flowtime-icon.png",
     "scheme": "flowtimeappmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
