@@ -31,7 +31,7 @@ export default function LoginScreen() {
 
     try {
       await login({ email: email.trim(), password });
-      router.replace('/home');
+      router.replace('/(auth)/select-role');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'No se pudo iniciar sesión');
     }
@@ -40,7 +40,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     try {
       await loginWithGoogle();
-      router.replace('/home');
+      router.replace('/(auth)/select-role');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Error al iniciar con Google');
     }

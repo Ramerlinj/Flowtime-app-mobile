@@ -1,6 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   ScreenContainer,
   HeaderLogo,
@@ -51,8 +52,9 @@ export default function HomeScreen() {
         </Text>
 
         <View style={[styles.badge, { backgroundColor: colors.inputBackground }]}>
+          <Ionicons name="star" size={13} color={colors.goldText} style={{ marginRight: 4 }} />
           <Text style={[styles.badgeText, { color: colors.goldText }]}>
-            ★ Plan Premium Flowtime
+            Plan Premium Flowtime
           </Text>
         </View>
       </View>
@@ -72,18 +74,30 @@ export default function HomeScreen() {
         </Text>
 
         <View style={styles.tokenList}>
-          <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
-            ✔ Fondo Gradiente: 0% #F5E8C7 ➔ 100% #FFFFFF
-          </Text>
-          <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
-            ✔ Cards Blancas: #F4F4F6 con Drop Shadow
-          </Text>
-          <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
-            ✔ Inputs: #D9D9D9 en cápsula redondeada
-          </Text>
-          <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
-            ✔ Botones Premium: Gradiente Dorado
-          </Text>
+          <View style={styles.tokenRow}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.goldText} style={styles.tokenIcon} />
+            <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
+              Fondo Gradiente: 0% #F5E8C7 ➔ 100% #FFFFFF
+            </Text>
+          </View>
+          <View style={styles.tokenRow}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.goldText} style={styles.tokenIcon} />
+            <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
+              Cards Blancas: #F4F4F6 con Drop Shadow
+            </Text>
+          </View>
+          <View style={styles.tokenRow}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.goldText} style={styles.tokenIcon} />
+            <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
+              Inputs: #D9D9D9 en cápsula redondeada
+            </Text>
+          </View>
+          <View style={styles.tokenRow}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.goldText} style={styles.tokenIcon} />
+            <Text style={[styles.tokenItem, { color: colors.textPrimary }]}>
+              Botones Premium: Gradiente Dorado
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -132,6 +146,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs + 2,
     borderRadius: BorderRadius.pill,
@@ -154,10 +170,18 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   tokenList: {
-    gap: 6,
+    gap: 8,
+  },
+  tokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tokenIcon: {
+    marginRight: 8,
   },
   tokenItem: {
     ...Typography.smallMedium,
+    flex: 1,
   },
   logoutButton: {
     marginTop: Spacing.sm,

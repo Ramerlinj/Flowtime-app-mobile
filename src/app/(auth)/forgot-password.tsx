@@ -10,6 +10,7 @@ import {
 } from '@/components/common';
 import { useAppTheme } from '@/context/ThemeContext';
 import { authService } from '@/api/auth.service';
+import { Ionicons } from '@expo/vector-icons';
 import { Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
 
@@ -92,8 +93,9 @@ export default function ForgotPasswordScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
           style={styles.backButton}>
+          <Ionicons name="arrow-back" size={14} color={colors.goldText} style={{ marginRight: 6 }} />
           <Text style={[styles.backText, { color: colors.goldText }]}>
-            ← Volver a Iniciar sesión
+            Volver a Iniciar sesión
           </Text>
         </TouchableOpacity>
       </View>

@@ -4,10 +4,10 @@ import {
   TextInput,
   View,
   TouchableOpacity,
-  Text,
   TextInputProps,
   ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '@/context/ThemeContext';
 import { BorderRadius, Layout, Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
@@ -27,7 +27,7 @@ export function FlowInput({
   onChangeText,
   ...rest
 }: FlowInputProps) {
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
   const [showPassword, setShowPassword] = useState(false);
 
   const shouldHideText = isPassword ? !showPassword : secureTextEntry;
@@ -63,9 +63,11 @@ export function FlowInput({
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={styles.eyeButton}>
-          <Text style={[styles.eyeText, { color: colors.placeholder }]}>
-            {showPassword ? 'Ocultar' : 'Ver'}
-          </Text>
+          <Ionicons
+            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+            size={20}
+            color={colors.placeholder}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -92,8 +94,5 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.sm,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  eyeText: {
-    ...Typography.smallMedium,
   },
 });
