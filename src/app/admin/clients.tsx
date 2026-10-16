@@ -19,7 +19,6 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
-import { DarkModeToggle } from '@/components/common/DarkModeToggle';
 import { AdminBottomNav } from '@/components/navigation/AdminBottomNav';
 
 export interface AdminClientItem {
@@ -117,9 +116,6 @@ export default function AdminClientsScreen() {
         locations={isDark ? Gradients.backgroundDarkLocations : Gradients.backgroundLightLocations}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Toggle de Modo Oscuro Flotante */}
-      <DarkModeToggle />
 
       <ScrollView
         contentContainerStyle={[
