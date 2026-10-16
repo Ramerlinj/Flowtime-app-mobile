@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
 
-export type AdminTab = 'home' | 'servicios' | 'clientes' | 'perfil';
+export type AdminTab = 'home' | 'servicios' | 'clientes' | 'perfil' | 'ajustes';
 
 interface AdminBottomNavProps {
   currentTab: AdminTab;
@@ -26,6 +26,8 @@ export function AdminBottomNav({ currentTab }: AdminBottomNavProps) {
       router.push('/admin/clients');
     } else if (tab === 'perfil') {
       router.push('/admin/profile');
+    } else if (tab === 'ajustes') {
+      router.push('/admin/settings');
     }
   };
 
@@ -124,6 +126,28 @@ export function AdminBottomNav({ currentTab }: AdminBottomNavProps) {
               : { color: colors.textSecondary },
           ]}>
           Perfil
+        </Text>
+      </TouchableOpacity>
+
+      {/* Tab 5: Ajustes */}
+      <TouchableOpacity
+        onPress={() => handleTabPress('ajustes')}
+        activeOpacity={0.7}
+        style={styles.navTab}>
+        {currentTab === 'ajustes' && <View style={styles.activeIndicator} />}
+        <Ionicons
+          name={currentTab === 'ajustes' ? 'settings' : 'settings-outline'}
+          size={21}
+          color={currentTab === 'ajustes' ? '#BA8609' : colors.textSecondary}
+        />
+        <Text
+          style={[
+            styles.navLabel,
+            currentTab === 'ajustes'
+              ? styles.navLabelActive
+              : { color: colors.textSecondary },
+          ]}>
+          Ajustes
         </Text>
       </TouchableOpacity>
     </View>
