@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   ScreenContainer,
   HeaderLogo,
-  DarkModeToggle,
   FlowButton,
 } from '@/components/common';
 import { useAppTheme } from '@/context/ThemeContext';
@@ -25,10 +24,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <DarkModeToggle />
-      <HeaderLogo />
-
+    <ScreenContainer header={<HeaderLogo />}>
       {/* Tarjeta de Perfil / Bienvenida */}
       <View
         style={[
