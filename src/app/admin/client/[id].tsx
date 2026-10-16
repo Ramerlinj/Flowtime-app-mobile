@@ -19,7 +19,6 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
-import { DarkModeToggle } from '@/components/common/DarkModeToggle';
 
 interface ServiceHistoryItem {
   id: string;
@@ -161,9 +160,6 @@ export default function AdminClientDetailsScreen() {
         locations={isDark ? Gradients.backgroundDarkLocations : Gradients.backgroundLightLocations}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Toggle de Modo Oscuro Flotante */}
-      <DarkModeToggle />
 
       <ScrollView
         contentContainerStyle={[
