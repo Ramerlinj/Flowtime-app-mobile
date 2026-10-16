@@ -15,15 +15,22 @@ import { useAppTheme } from '@/context/ThemeContext';
 
 interface ScreenContainerProps {
   children: React.ReactNode;
+  header?: React.ReactNode;
   scrollable?: boolean;
 }
 
-export function ScreenContainer({ children, scrollable = true }: ScreenContainerProps) {
+export function ScreenContainer({
+  children,
+  header,
+  scrollable = true,
+}: ScreenContainerProps) {
   const insets = useSafeAreaInsets();
   const { isDark } = useAppTheme();
 
   const gradientColors = isDark ? Gradients.backgroundDark : Gradients.backgroundLight;
-  const gradientLocations = isDark ? Gradients.backgroundDarkLocations : Gradients.backgroundLightLocations;
+  const gradientLocations = isDark
+    ? Gradients.backgroundDarkLocations
+    : Gradients.backgroundLightLocations;
 
   const content = (
     <View style={[styles.innerContent, { maxWidth: Layout.maxContentWidth }]}>
@@ -43,6 +50,21 @@ export function ScreenContainer({ children, scrollable = true }: ScreenContainer
         backgroundColor="transparent"
         translucent
       />
+
+      {/* Header fijo arriba (ej. Logo) que no se mueve con el teclado */}
+      {header && (
+        <View
+          style={[
+            styles.fixedHeader,
+            {
+              paddingTop: Math.max(insets.top, 16) + Spacing.xs,
+            },
+          ]}>
+          {header}
+        </View>
+      )}
+
+      {/* Contenido centrado que responde al teclado */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardContainer}>
@@ -51,7 +73,7 @@ export function ScreenContainer({ children, scrollable = true }: ScreenContainer
             contentContainerStyle={[
               styles.scrollContent,
               {
-                paddingTop: Math.max(insets.top, 16) + 40,
+                paddingTop: header ? Spacing.xs : Math.max(insets.top, 20) + Spacing.sm,
                 paddingBottom: Math.max(insets.bottom, 20) + Spacing.base,
               },
             ]}
@@ -64,7 +86,7 @@ export function ScreenContainer({ children, scrollable = true }: ScreenContainer
             style={[
               styles.nonScrollContent,
               {
-                paddingTop: Math.max(insets.top, 16) + 40,
+                paddingTop: header ? Spacing.xs : Math.max(insets.top, 20) + Spacing.sm,
                 paddingBottom: Math.max(insets.bottom, 20) + Spacing.base,
               },
             ]}>
@@ -79,6 +101,12 @@ export function ScreenContainer({ children, scrollable = true }: ScreenContainer
 const styles = StyleSheet.create({
   gradientContainer: {
     flex: 1,
+  },
+  fixedHeader: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   keyboardContainer: {
     flex: 1,
