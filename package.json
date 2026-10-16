@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.18",
     "@expo/vector-icons": "^15.0.2",
+    "@supabase/supabase-js": "^2.118.0",
     "expo": "~57.0.22",
     "expo-constants": "~57.0.18",
     "expo-device": "~57.0.2",
@@ -14,6 +15,7 @@
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
     "expo-router": "~57.0.21",
+    "expo-secure-store": "^58.0.2",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
