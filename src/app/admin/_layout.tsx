@@ -13,6 +13,7 @@ export default function AdminLayout() {
       <Stack.Screen name="clients" />
       <Stack.Screen name="client/[id]" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="settings" />
     </Stack>
   );
 }
