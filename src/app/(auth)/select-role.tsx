@@ -6,10 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   ScreenContainer,
   HeaderLogo,
-  DarkModeToggle,
 } from '@/components/common';
 import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/api/supabase';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
 import { Shadows } from '@/theme/shadows';
@@ -17,29 +17,46 @@ import { Shadows } from '@/theme/shadows';
 export default function SelectRoleScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
-  const { logout } = useAuth();
+  const { user, logout, refreshProfile } = useAuth();
+  const [savingRole, setSavingRole] = React.useState(false);
 
-  const handleSelectAdmin = () => {
-    router.replace('/admin');
+  const handleSelectAdmin = async () => {
+    try {
+      if (user?.id) {
+        setSavingRole(true);
+        await supabase.from('profiles').update({ rol: 'PROFESIONAL' }).eq('id', user.id);
+        await refreshProfile();
+      }
+    } catch (e) {
+      console.warn('[SelectRole] Error al actualizar rol:', e);
+    } finally {
+      setSavingRole(false);
+      router.replace('/admin');
+    }
   };
 
-  const handleSelectClient = () => {
-    router.replace('/client');
+  const handleSelectClient = async () => {
+    try {
+      if (user?.id) {
+        setSavingRole(true);
+        await supabase.from('profiles').update({ rol: 'CLIENTE' }).eq('id', user.id);
+        await refreshProfile();
+      }
+    } catch (e) {
+      console.warn('[SelectRole] Error al actualizar rol:', e);
+    } finally {
+      setSavingRole(false);
+      router.replace('/client');
+    }
   };
 
-  const handleBackToLogin = () => {
-    logout();
+  const handleBackToLogin = async () => {
+    await logout();
     router.replace('/(auth)/login');
   };
 
   return (
-    <ScreenContainer>
-      {/* Botón superior derecho para Modo Oscuro */}
-      <DarkModeToggle />
-
-      {/* Logotipo Flowtime */}
-      <HeaderLogo />
-
+    <ScreenContainer header={<HeaderLogo />}>
       {/* Título de la pantalla */}
       <Text style={[styles.title, { color: colors.textPrimary }]}>
         ¿Cómo vas a usar Flowtime?
