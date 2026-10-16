@@ -21,7 +21,6 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { Gradients } from '@/theme/colors';
 import { Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
-import { DarkModeToggle } from '@/components/common/DarkModeToggle';
 import { AdminBottomNav } from '@/components/navigation/AdminBottomNav';
 
 const HERO_IMAGE =
@@ -111,9 +110,6 @@ export default function AdminProfileScreen() {
         locations={isDark ? Gradients.backgroundDarkLocations : Gradients.backgroundLightLocations}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Toggle de Modo Oscuro Flotante */}
-      <DarkModeToggle />
 
       <ScrollView
         contentContainerStyle={[
