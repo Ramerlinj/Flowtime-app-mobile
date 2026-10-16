@@ -1,9 +1,13 @@
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
+
+// Permite completar sesiones de autenticación web/OAuth al retornar a la app
+WebBrowser.maybeCompleteAuthSession();
 
 // Evita que la splash screen se oculte antes de estar listos
 SplashScreen.preventAutoHideAsync().catch(() => {});
