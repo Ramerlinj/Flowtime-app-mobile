@@ -19,7 +19,6 @@ import { useAppTheme } from '@/context/ThemeContext';
 import { Gradients, BrandColors } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
-import { DarkModeToggle } from '@/components/common/DarkModeToggle';
 import { CustomSwitch } from '@/components/common/CustomSwitch';
 import { AdminBottomNav } from '@/components/navigation/AdminBottomNav';
 
@@ -211,9 +210,6 @@ export default function AdminHomeScreen() {
         locations={isDark ? Gradients.backgroundDarkLocations : Gradients.backgroundLightLocations}
         style={StyleSheet.absoluteFill}
       />
-
-      {/* Toggle de Modo Oscuro Flotante en la esquina */}
-      <DarkModeToggle />
 
       <ScrollView
         contentContainerStyle={[
