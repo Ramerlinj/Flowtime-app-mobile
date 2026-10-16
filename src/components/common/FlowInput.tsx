@@ -3,6 +3,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  Text,
   TouchableOpacity,
   TextInputProps,
   ViewStyle,
@@ -16,12 +17,14 @@ import { Shadows } from '@/theme/shadows';
 export interface FlowInputProps extends TextInputProps {
   containerStyle?: ViewStyle;
   isPassword?: boolean;
+  errorMessage?: string | null;
 }
 
 export function FlowInput({
   containerStyle,
   isPassword = false,
   secureTextEntry,
+  errorMessage,
   placeholder,
   value,
   onChangeText,
@@ -31,50 +34,60 @@ export function FlowInput({
   const [showPassword, setShowPassword] = useState(false);
 
   const shouldHideText = isPassword ? !showPassword : secureTextEntry;
+  const hasError = !!errorMessage;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.inputBackground,
-        },
-        Shadows.drop,
-        containerStyle,
-      ]}>
-      <TextInput
-        placeholder={placeholder}
-        placeholderTextColor={colors.placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={shouldHideText}
-        autoCapitalize="none"
+    <View style={styles.wrapper}>
+      <View
         style={[
-          styles.input,
+          styles.container,
           {
-            color: colors.textPrimary,
+            backgroundColor: colors.inputBackground,
+            borderColor: hasError ? '#E74C3C' : 'transparent',
+            borderWidth: hasError ? 1.5 : 0,
           },
-        ]}
-        {...rest}
-      />
-      {isPassword && (
-        <TouchableOpacity
-          onPress={() => setShowPassword((prev) => !prev)}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          style={styles.eyeButton}>
-          <Ionicons
-            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-            size={20}
-            color={colors.placeholder}
-          />
-        </TouchableOpacity>
-      )}
+          Shadows.drop,
+          containerStyle,
+        ]}>
+        <TextInput
+          placeholder={placeholder}
+          placeholderTextColor={colors.placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={shouldHideText}
+          autoCapitalize="none"
+          style={[
+            styles.input,
+            {
+              color: colors.textPrimary,
+            },
+          ]}
+          {...rest}
+        />
+        {isPassword && (
+          <TouchableOpacity
+            onPress={() => setShowPassword((prev) => !prev)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.eyeButton}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={colors.placeholder}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+      {hasError && <Text style={styles.errorText}>{errorMessage}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    width: '100%',
+    marginVertical: Spacing.xs,
+  },
   container: {
     width: '100%',
     height: Layout.inputHeight,
@@ -82,7 +95,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,
-    marginVertical: Spacing.xs + 2,
   },
   input: {
     flex: 1,
@@ -94,5 +106,12 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.sm,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorText: {
+    ...Typography.small,
+    fontSize: 12,
+    color: '#E74C3C',
+    marginTop: 4,
+    marginLeft: Spacing.lg,
   },
 });
