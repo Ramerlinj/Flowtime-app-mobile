@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Appointment, AppointmentStatus, PaymentMethod, Service } from './types';
+import { Appointment, AppointmentStatus, PaymentMethod } from './types';
 
 export interface CreateAppointmentPayload {
   businessId: string;

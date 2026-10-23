@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,8 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
-  Alert,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -16,8 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
+import { useAlert } from '@/context/AlertContext';
+import { useAuth } from '@/context/AuthContext';
+import { businessService } from '@/api/business.service';
+import { appointmentService } from '@/api/appointment.service';
+import { Appointment } from '@/api/types';
 import { Gradients } from '@/theme/colors';
-import { BorderRadius, Spacing } from '@/theme/spacing';
+import { Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 import { AdminBottomNav } from '@/components/navigation/AdminBottomNav';
 
@@ -29,77 +34,121 @@ export interface AdminClientItem {
   nextAppointment: string;
 }
 
-const INITIAL_CLIENTS: AdminClientItem[] = [
-  {
-    id: '1',
-    name: 'Juan R.',
-    initials: 'JR',
-    phone: '809-000-0000',
-    nextAppointment: 'Mañana 4:00 P.M.',
-  },
-  {
-    id: '2',
-    name: 'Pedro M.',
-    initials: 'PM',
-    phone: '809-000-0000',
-    nextAppointment: 'Jueves 24 a las 5:00 P.M.',
-  },
-  {
-    id: '3',
-    name: 'Carlos Ramírez',
-    initials: 'CR',
-    phone: '809-555-1234',
-    nextAppointment: 'Viernes 25 a las 11:00 A.M.',
-  },
-  {
-    id: '4',
-    name: 'Mateo Díaz',
-    initials: 'MD',
-    phone: '829-444-9876',
-    nextAppointment: 'Sábado 26 a las 2:30 P.M.',
-  },
-];
-
 export default function AdminClientsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { showAlert, showError } = useAlert();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [clientsList, setClientsList] = useState<AdminClientItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchClients() {
+      if (!user?.id) return;
+      try {
+        const biz = await businessService.getBusinessByOwnerId(user.id);
+        if (biz && isMounted) {
+          const apps = await appointmentService.getBusinessAppointments(biz.id);
+          if (apps && apps.length > 0 && isMounted) {
+            const clientMap = new Map<string, AdminClientItem>();
+
+            apps.forEach((a: Appointment) => {
+              if (a.client) {
+                const fullName = `${a.client.nombre} ${a.client.apellido || ''}`.trim();
+                const initials = `${a.client.nombre?.[0] || 'C'}${a.client.apellido?.[0] || ''}`.toUpperCase();
+                const phone = a.client.telefono || 'Sin teléfono';
+                const nextAppStr = `${a.fecha} a las ${a.hora_inicio ? a.hora_inicio.slice(0, 5) : '12:00'}`;
+
+                if (!clientMap.has(a.client.id)) {
+                  clientMap.set(a.client.id, {
+                    id: a.client.id,
+                    name: fullName,
+                    initials,
+                    phone,
+                    nextAppointment: nextAppStr,
+                  });
+                }
+              }
+            });
+
+            if (clientMap.size > 0 && isMounted) {
+              setClientsList(Array.from(clientMap.values()));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error cargando clientes:', err);
+      }
+    }
+    fetchClients();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (user?.id) {
+      try {
+        const biz = await businessService.getBusinessByOwnerId(user.id);
+        if (biz) {
+          const apps = await appointmentService.getBusinessAppointments(biz.id);
+          if (apps && apps.length > 0) {
+            const clientMap = new Map<string, AdminClientItem>();
+            apps.forEach((a: Appointment) => {
+              if (a.client) {
+                const fullName = `${a.client.nombre} ${a.client.apellido || ''}`.trim();
+                const initials = `${a.client.nombre?.[0] || 'C'}${a.client.apellido?.[0] || ''}`.toUpperCase();
+                const phone = a.client.telefono || 'Sin teléfono';
+                const nextAppStr = `${a.fecha} a las ${a.hora_inicio ? a.hora_inicio.slice(0, 5) : '12:00'}`;
+                if (!clientMap.has(a.client.id)) {
+                  clientMap.set(a.client.id, {
+                    id: a.client.id,
+                    name: fullName,
+                    initials,
+                    phone,
+                    nextAppointment: nextAppStr,
+                  });
+                }
+              }
+            });
+            if (clientMap.size > 0) {
+              setClientsList(Array.from(clientMap.values()));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error refrescando clientes:', err);
+      }
+    }
+    setRefreshing(false);
+  };
 
   // Filtrar clientes según búsqueda
-  const filteredClients = INITIAL_CLIENTS.filter(
+  const filteredClients = clientsList.filter(
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.phone.includes(searchQuery)
   );
 
   const handleOpenChat = (client: AdminClientItem) => {
-    Alert.alert(
-      `Contactar a ${client.name}`,
-      `¿Deseas enviar un mensaje o llamar al ${client.phone}?`,
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'WhatsApp',
-          onPress: () => {
-            Linking.openURL(`https://wa.me/18090000000?text=Hola%20${encodeURIComponent(client.name)},%20te%20escribimos%20de%20Flowtime.`).catch(() => {
-              Alert.alert('Aviso', 'No se pudo abrir WhatsApp.');
-            });
-          },
-        },
-        {
-          text: 'Llamar',
-          onPress: () => {
-            Linking.openURL(`tel:${client.phone}`).catch(() => {
-              Alert.alert('Aviso', 'No se pudo iniciar la llamada.');
-            });
-          },
-        },
-      ]
-    );
+    showAlert({
+      title: `Contactar a ${client.name}`,
+      message: `¿Deseas enviar un WhatsApp al número ${client.phone}?`,
+      type: 'info',
+      confirmText: 'Abrir WhatsApp',
+      cancelText: 'Cancelar',
+      onConfirm: () => {
+        Linking.openURL(
+          `https://wa.me/18090000000?text=Hola%20${encodeURIComponent(client.name)},%20te%20escribimos%20de%20Flowtime.`
+        ).catch(() => {
+          showError('Aviso', 'No se pudo abrir WhatsApp.');
+        });
+      },
+    });
   };
 
   return (
@@ -125,6 +174,14 @@ export default function AdminClientsScreen() {
             paddingBottom: insets.bottom + 90,
           },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#C89C25"
+            colors={['#C89C25']}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         {/* Cabecera Superior: Logo Flowtime */}
         <View style={styles.topHeaderRow}>
@@ -229,9 +286,14 @@ export default function AdminClientsScreen() {
 
           {filteredClients.length === 0 && (
             <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={40} color={colors.placeholder} />
+              <Ionicons name="people-outline" size={44} color="#D4AF37" />
+              <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                {searchQuery.length > 0 ? 'Sin resultados' : 'Sin clientes registrados'}
+              </Text>
               <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-                No se encontraron clientes con "{searchQuery}"
+                {searchQuery.length > 0
+                  ? `No se encontraron clientes que coincidan con "${searchQuery}".`
+                  : 'Tus clientes aparecerán aquí automáticamente en cuanto reserven una cita en tu negocio o los atiendas en tu agenda.'}
               </Text>
             </View>
           )}
@@ -346,11 +408,19 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 10,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 4,
+    textAlign: 'center',
   },
   emptyStateText: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
+    lineHeight: 18,
   },
 });

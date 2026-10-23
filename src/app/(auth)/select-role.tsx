@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,7 +9,6 @@ import {
 } from '@/components/common';
 import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/api/supabase';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
 import { Shadows } from '@/theme/shadows';
@@ -17,15 +16,15 @@ import { Shadows } from '@/theme/shadows';
 export default function SelectRoleScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
-  const { user, logout, refreshProfile } = useAuth();
-  const [savingRole, setSavingRole] = React.useState(false);
+  const { user, logout, updateProfile } = useAuth();
+  const [savingRole, setSavingRole] = useState(false);
 
   const handleSelectAdmin = async () => {
+    if (savingRole) return;
     try {
+      setSavingRole(true);
       if (user?.id) {
-        setSavingRole(true);
-        await supabase.from('profiles').update({ rol: 'PROFESIONAL' }).eq('id', user.id);
-        await refreshProfile();
+        await updateProfile({ role: 'ADMIN' });
       }
     } catch (e) {
       console.warn('[SelectRole] Error al actualizar rol:', e);
@@ -36,11 +35,11 @@ export default function SelectRoleScreen() {
   };
 
   const handleSelectClient = async () => {
+    if (savingRole) return;
     try {
+      setSavingRole(true);
       if (user?.id) {
-        setSavingRole(true);
-        await supabase.from('profiles').update({ rol: 'CLIENTE' }).eq('id', user.id);
-        await refreshProfile();
+        await updateProfile({ role: 'CLIENTE' });
       }
     } catch (e) {
       console.warn('[SelectRole] Error al actualizar rol:', e);
@@ -66,8 +65,9 @@ export default function SelectRoleScreen() {
         {/* Tarjeta 1: Soy Profesional / Negocio (Admin) */}
         <TouchableOpacity
           onPress={handleSelectAdmin}
+          disabled={savingRole}
           activeOpacity={0.88}
-          style={[styles.cardTouchable, Shadows.goldButtonDrop]}>
+          style={[styles.cardTouchable, Shadows.goldButtonDrop, savingRole && { opacity: 0.6 }]}>
           <LinearGradient
             colors={['#BA8609', '#F4DD89', '#CFA930']}
             locations={[0, 0.45, 1]}
@@ -90,8 +90,9 @@ export default function SelectRoleScreen() {
         {/* Tarjeta 2: Soy Cliente (Usuario) */}
         <TouchableOpacity
           onPress={handleSelectClient}
+          disabled={savingRole}
           activeOpacity={0.88}
-          style={[styles.cardTouchable, Shadows.drop]}>
+          style={[styles.cardTouchable, Shadows.drop, savingRole && { opacity: 0.6 }]}>
           <LinearGradient
             colors={
               isDark

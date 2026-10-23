@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,19 +8,25 @@ import {
   StatusBar,
   Modal,
   TextInput,
-  Alert,
+  RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { useAlert } from '@/context/AlertContext';
+import { useAuth } from '@/context/AuthContext';
+import { businessService } from '@/api/business.service';
+import { appointmentService } from '@/api/appointment.service';
+import { Business, Appointment, Specialist } from '@/api/types';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 import { CustomSwitch } from '@/components/common/CustomSwitch';
 import { AdminBottomNav } from '@/components/navigation/AdminBottomNav';
+import { BusinessSetupCard } from '@/components/admin/BusinessSetupCard';
+import { BusinessSetupGuideModal } from '@/components/admin/BusinessSetupGuideModal';
 
 // Tipos para las Citas del Cronograma
 export type AppointmentStatus =
@@ -46,97 +52,61 @@ interface AgendaDay {
   dayName: string;
   dayNumber: number;
   month: string;
+  isoDate: string;
   appointmentsCount: number;
 }
 
-const AGENDA_DAYS: AgendaDay[] = [
-  { dayName: 'Lun', dayNumber: 10, month: 'Sep', appointmentsCount: 4 },
-  { dayName: 'Mar', dayNumber: 11, month: 'Sep', appointmentsCount: 2 },
-  { dayName: 'Mie', dayNumber: 12, month: 'Sep', appointmentsCount: 0 },
-  { dayName: 'Jue', dayNumber: 13, month: 'Sep', appointmentsCount: 3 },
-  { dayName: 'Vie', dayNumber: 14, month: 'Sep', appointmentsCount: 5 },
-  { dayName: 'Sab', dayNumber: 15, month: 'Sep', appointmentsCount: 6 },
-  { dayName: 'Dom', dayNumber: 16, month: 'Sep', appointmentsCount: 5 },
-];
+const generateAgendaDays = (): AgendaDay[] => {
+  const days: AgendaDay[] = [];
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const today = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dayOfWeek = d.getDay();
+    const dayNumber = d.getDate();
+    const monthIndex = d.getMonth();
+    const yyyy = d.getFullYear();
+    const mm = String(monthIndex + 1).padStart(2, '0');
+    const dd = String(dayNumber).padStart(2, '0');
+    days.push({
+      dayName: dayNames[dayOfWeek],
+      dayNumber,
+      month: monthNames[monthIndex],
+      isoDate: `${yyyy}-${mm}-${dd}`,
+      appointmentsCount: 0,
+    });
+  }
+  return days;
+};
 
-const INITIAL_APPOINTMENTS: AdminAppointment[] = [
-  {
-    id: '1',
-    clientName: 'Carlos',
-    service: 'Taper Fade',
-    time: '12:00 PM',
-    price: 300,
-    note: 'Piel sensible en cuello',
-    status: 'pendiente',
-    barberName: 'Diego Tejeda',
-    dayIndex: 0,
-  },
-  {
-    id: '2',
-    clientName: 'Mateo',
-    service: 'Corte + Barba',
-    time: '11:00 AM',
-    price: 700,
-    note: 'Toalla caliente',
-    status: 'en_curso',
-    barberName: 'Diego Tejeda',
-    dayIndex: 0,
-  },
-  {
-    id: '3',
-    clientName: 'José Luis',
-    service: 'Cerquillo',
-    time: '10:00 AM',
-    price: 300,
-    note: '',
-    status: 'completada',
-    barberName: 'Diego Tejeda',
-    dayIndex: 0,
-  },
-  {
-    id: '4',
-    clientName: 'Miguel Cuevas',
-    service: 'Taper Fade',
-    time: '9:00 AM',
-    price: 300,
-    note: '',
-    status: 'no_asistio',
-    barberName: 'Diego Tejeda',
-    dayIndex: 0,
-  },
-];
+const INITIAL_AGENDA_DAYS: AgendaDay[] = generateAgendaDays();
 
 export default function AdminHomeScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { showWarning, showSuccess, showError } = useAlert();
+  const { user } = useAuth();
 
   // Estados de Navegación y Agenda
+  const [agendaDays, setAgendaDays] = useState<AgendaDay[]>(INITIAL_AGENDA_DAYS);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<'home' | 'servicios' | 'clientes' | 'perfil'>('home');
-  const [appointments, setAppointments] = useState<AdminAppointment[]>(INITIAL_APPOINTMENTS);
-  const [isBarberActive, setIsBarberActive] = useState<boolean>(true);
+  const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [isSetupGuideOpen, setIsSetupGuideOpen] = useState<boolean>(false);
 
-  // Estados de Modales
-  const [isManualModalVisible, setIsManualModalVisible] = useState<boolean>(false);
-  const [isBlockModalVisible, setIsBlockModalVisible] = useState<boolean>(false);
-  const [isJornadaModalVisible, setIsJornadaModalVisible] = useState<boolean>(false);
-
-  // Estados para Modal de Bloqueos (media_1790714211945.png)
-  const [blockDayIndex, setBlockDayIndex] = useState<number>(0);
-  const [blockTime, setBlockTime] = useState<string>('1:00 PM - 2:00 PM');
-  const [blockReason, setBlockReason] = useState<string>('Almuerzo / Descanso');
-  const [blockNote, setBlockNote] = useState<string>('');
-
-  // Estados para Modal de Jornada (media_1790714229080.png)
+  // Estados para Modal de Jornada
   const [jornadaDays, setJornadaDays] = useState([
-    { day: 'Lunes', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Martes', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Miercoles', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Jueves', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Viernes', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Sábado', hours: '9:00 AM - 9:00 PM', active: true },
-    { day: 'Domingo', hours: 'Día Libre / Cerrado', active: false },
+    { day: 'Lunes', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Martes', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Miercoles', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Jueves', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Viernes', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Sábado', hours: '9:00 AM - 9:00 PM', active: true, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
+    { day: 'Domingo', hours: 'Día Libre / Cerrado', active: false, hora_apertura: '09:00:00', hora_cierre: '21:00:00' },
   ]);
 
   const toggleJornadaDay = (index: number, newValue: boolean) => {
@@ -153,6 +123,159 @@ export default function AdminHomeScreen() {
     );
   };
 
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchAgenda() {
+      if (!user?.id) return;
+      try {
+        const biz = await businessService.getBusinessByOwnerId(user.id);
+        if (isMounted) {
+          setBusiness(biz);
+
+          // Si el usuario es negocio pero no tiene local registrado o configurado, abrir asistente de pasos
+          if (!biz || !biz.nombre_comercial) {
+            setIsSetupGuideOpen(true);
+            return;
+          }
+
+          const [rawAppointments, rawSpecialists, rawHours] = await Promise.all([
+            appointmentService.getBusinessAppointments(biz.id),
+            businessService.getSpecialists(biz.id),
+            businessService.getBusinessHours(biz.id),
+          ]);
+
+          if (isMounted && rawSpecialists) {
+            setSpecialists(rawSpecialists);
+          }
+
+          if (isMounted && rawHours && rawHours.length > 0) {
+            const daysNames = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sábado'];
+            const orderedIdxs = [1, 2, 3, 4, 5, 6, 0];
+            const mappedDays = orderedIdxs.map((dNum) => {
+              const h = rawHours.find((item) => item.dia_semana === dNum);
+              const isActive = h ? !h.cerrado : dNum !== 0;
+              const openH = h?.hora_apertura ? h.hora_apertura.slice(0, 5) : '09:00';
+              const closeH = h?.hora_cierre ? h.hora_cierre.slice(0, 5) : '21:00';
+              return {
+                day: daysNames[dNum],
+                hours: isActive ? `${openH} - ${closeH}` : 'Día Libre / Cerrado',
+                active: isActive,
+                hora_apertura: h?.hora_apertura || '09:00:00',
+                hora_cierre: h?.hora_cierre || '21:00:00',
+              };
+            });
+            setJornadaDays(mappedDays);
+          }
+
+          if (rawAppointments && rawAppointments.length > 0 && isMounted) {
+            const freshDays = generateAgendaDays();
+
+            const mapped: AdminAppointment[] = rawAppointments.map((a: Appointment) => {
+              const dayIdx = freshDays.findIndex((d) => d.isoDate === a.fecha);
+              const statusMap: Record<string, AppointmentStatus> = {
+                PENDIENTE: 'pendiente',
+                CONFIRMADA: 'en_curso',
+                COMPLETADA: 'completada',
+                CANCELADA: 'cancelada',
+                NO_ASISTIO: 'no_asistio',
+              };
+
+              const clientName = a.client
+                ? `${a.client.nombre} ${a.client.apellido || ''}`.trim()
+                : 'Cliente';
+
+              return {
+                id: a.id,
+                clientName,
+                service: 'Servicio Flowtime',
+                time: a.hora_inicio ? a.hora_inicio.slice(0, 5) : '12:00 PM',
+                price: Number(a.precio_total) || 300,
+                note: a.notas || '',
+                status: statusMap[a.estado] || 'pendiente',
+                barberName: a.specialist ? `${a.specialist.nombre}` : 'Especialista',
+                dayIndex: dayIdx !== -1 ? dayIdx : 0,
+              };
+            });
+
+            freshDays.forEach((d, idx) => {
+              d.appointmentsCount = mapped.filter((app) => app.dayIndex === idx).length;
+            });
+
+            setAgendaDays(freshDays);
+            setAppointments(mapped);
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminHomeScreen] Error cargando citas:', err);
+      }
+    }
+    fetchAgenda();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (user?.id) {
+      try {
+        const biz = await businessService.getBusinessByOwnerId(user.id);
+        if (biz) {
+          setBusiness(biz);
+          const rawAppointments = await appointmentService.getBusinessAppointments(biz.id);
+          if (rawAppointments && rawAppointments.length > 0) {
+            const freshDays = generateAgendaDays();
+            const mapped: AdminAppointment[] = rawAppointments.map((a: Appointment) => {
+              const dayIdx = freshDays.findIndex((d) => d.isoDate === a.fecha);
+              const statusMap: Record<string, AppointmentStatus> = {
+                PENDIENTE: 'pendiente',
+                CONFIRMADA: 'en_curso',
+                COMPLETADA: 'completada',
+                CANCELADA: 'cancelada',
+                NO_ASISTIO: 'no_asistio',
+              };
+              const clientName = a.client
+                ? `${a.client.nombre} ${a.client.apellido || ''}`.trim()
+                : 'Cliente';
+              return {
+                id: a.id,
+                clientName,
+                service: 'Servicio Flowtime',
+                time: a.hora_inicio ? a.hora_inicio.slice(0, 5) : '12:00 PM',
+                price: Number(a.precio_total) || 300,
+                note: a.notas || '',
+                status: statusMap[a.estado] || 'pendiente',
+                barberName: a.specialist ? `${a.specialist.nombre}` : 'Especialista',
+                dayIndex: dayIdx !== -1 ? dayIdx : 0,
+              };
+            });
+            freshDays.forEach((d, idx) => {
+              d.appointmentsCount = mapped.filter((app) => app.dayIndex === idx).length;
+            });
+            setAgendaDays(freshDays);
+            setAppointments(mapped);
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminHomeScreen] Error en onRefresh:', err);
+      }
+    }
+    setRefreshing(false);
+  };
+
+  // Estados de Modales
+  const [isManualModalVisible, setIsManualModalVisible] = useState<boolean>(false);
+  const [isBlockModalVisible, setIsBlockModalVisible] = useState<boolean>(false);
+  const [isJornadaModalVisible, setIsJornadaModalVisible] = useState<boolean>(false);
+
+  // Estados para Modal de Bloqueos (media_1790714211945.png)
+  const [blockDayIndex, setBlockDayIndex] = useState<number>(0);
+  const [blockTime, setBlockTime] = useState<string>('1:00 PM - 2:00 PM');
+  const [blockReason, setBlockReason] = useState<string>('Almuerzo / Descanso');
+  const [blockNote, setBlockNote] = useState<string>('');
+
+
+
   // Estado formulario Cita Manual
   const [manualClientName, setManualClientName] = useState<string>('');
   const [manualService, setManualService] = useState<string>('Taper Fade');
@@ -163,17 +286,39 @@ export default function AdminHomeScreen() {
   // Filtrar citas del día seleccionado
   const dayAppointments = appointments.filter((a) => a.dayIndex === selectedDayIndex);
 
-  // Actualizar estado de una cita
-  const handleUpdateStatus = (id: string, newStatus: AppointmentStatus) => {
+  // Métricas calculadas reales
+  const todayAppointmentsCount = appointments.filter((a) => a.dayIndex === 0).length;
+  const pendingAppointmentsCount = appointments.filter((a) => a.status === 'pendiente').length;
+  const totalIncomeWeek = appointments.reduce((sum, a) => sum + a.price, 0);
+
+  // Actualizar estado de una cita en BD y localmente
+  const handleUpdateStatus = async (id: string, newStatus: AppointmentStatus) => {
     setAppointments((prev) =>
       prev.map((app) => (app.id === id ? { ...app, status: newStatus } : app))
     );
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isUuid) {
+      try {
+        const reverseMap: Record<AppointmentStatus, 'PENDIENTE' | 'CONFIRMADA' | 'COMPLETADA' | 'CANCELADA' | 'NO_ASISTIO'> = {
+          pendiente: 'PENDIENTE',
+          en_curso: 'CONFIRMADA',
+          completada: 'COMPLETADA',
+          cancelada: 'CANCELADA',
+          no_asistio: 'NO_ASISTIO',
+        };
+        await appointmentService.updateStatus(id, reverseMap[newStatus]);
+        showSuccess('Cita actualizada', `El estado se ha cambiado a ${newStatus}.`);
+      } catch (err) {
+        console.warn('Error al actualizar estado en Supabase:', err);
+      }
+    }
   };
 
   // Registrar Cita Manual (Cliente presencial)
   const handleRegisterManualAppointment = () => {
     if (!manualClientName.trim()) {
-      Alert.alert('Nombre requerido', 'Por favor ingresa el nombre del cliente presencial.');
+      showWarning('Nombre requerido', 'Por favor ingresa el nombre del cliente presencial.');
       return;
     }
 
@@ -193,7 +338,7 @@ export default function AdminHomeScreen() {
     setIsManualModalVisible(false);
     setManualClientName('');
     setManualNote('');
-    Alert.alert('Cita Registrada', `Se ha agendado la cita de ${newApp.clientName} en el cronograma.`);
+    showSuccess('Cita Registrada', `Se ha agendado la cita de ${newApp.clientName} en el cronograma.`);
   };
 
   return (
@@ -219,6 +364,14 @@ export default function AdminHomeScreen() {
             paddingBottom: insets.bottom + 90,
           },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#C89C25"
+            colors={['#C89C25']}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         {/* Cabecera Superior: Logo Flowtime */}
         <View style={styles.topHeaderRow}>
@@ -236,7 +389,9 @@ export default function AdminHomeScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.dashboardCard, Shadows.goldButtonDrop]}>
-          <Text style={styles.dashboardTitle}>Dashboard</Text>
+          <Text style={styles.dashboardTitle}>
+            {business?.nombre_comercial ? `Dashboard · ${business.nombre_comercial}` : 'Dashboard'}
+          </Text>
           <Text style={styles.dashboardSubtitle}>
             Panel con citas, métricas y accesos rápidos
           </Text>
@@ -246,22 +401,28 @@ export default function AdminHomeScreen() {
           <View style={styles.metricsRow}>
             {/* Métrica 1 */}
             <View style={styles.metricCol}>
-              <Text style={styles.metricNumber}>12</Text>
+              <Text style={styles.metricNumber}>
+                {String(todayAppointmentsCount).padStart(2, '0')}
+              </Text>
               <Text style={styles.metricLabel}>Citas de hoy</Text>
-              <Text style={styles.metricSub}>3 más que ayer</Text>
+              <Text style={styles.metricSub}>Agendadas</Text>
             </View>
 
             {/* Métrica 2 */}
             <View style={styles.metricCol}>
-              <Text style={styles.metricNumber}>05</Text>
+              <Text style={styles.metricNumber}>
+                {String(pendingAppointmentsCount).padStart(2, '0')}
+              </Text>
               <Text style={styles.metricLabel}>Pendientes</Text>
-              <Text style={styles.metricSub}>A confirmar</Text>
+              <Text style={styles.metricSub}>Por confirmar</Text>
             </View>
 
             {/* Métrica 3 */}
             <View style={styles.metricCol}>
               <View style={styles.metricIncomeRow}>
-                <Text style={styles.metricNumber}>24,500</Text>
+                <Text style={styles.metricNumber}>
+                  {totalIncomeWeek.toLocaleString('es-DO')}
+                </Text>
                 <Text style={styles.metricDop}>DOP</Text>
               </View>
               <Text style={styles.metricLabel}>Ingresos</Text>
@@ -269,6 +430,12 @@ export default function AdminHomeScreen() {
             </View>
           </View>
         </LinearGradient>
+
+        {/* Guía de Configuración del Negocio */}
+        <BusinessSetupCard
+          business={business}
+          onPressSetup={() => setIsSetupGuideOpen(true)}
+        />
 
         {/* Card 2: Navegador de Agenda */}
         <View
@@ -289,7 +456,9 @@ export default function AdminHomeScreen() {
                 Navegador de Agenda
               </Text>
             </View>
-            <Text style={styles.agendaHeaderRight}>Mostrando: Hoy</Text>
+            <Text style={styles.agendaHeaderRight}>
+              {selectedDayIndex === 0 ? 'Mostrando: Hoy' : `Día ${selectedDayIndex + 1}`}
+            </Text>
           </View>
 
           {/* Carrusel de Días con contador de personas agendadas abajo */}
@@ -297,12 +466,12 @@ export default function AdminHomeScreen() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.agendaDaysContainer}>
-            {AGENDA_DAYS.map((day, index) => {
+            {agendaDays.map((day, index) => {
               const isSelected = selectedDayIndex === index;
 
               return (
                 <TouchableOpacity
-                  key={day.dayNumber}
+                  key={`${day.dayName}-${day.dayNumber}`}
                   onPress={() => setSelectedDayIndex(index)}
                   activeOpacity={0.85}
                   style={styles.dayPillWrapper}>
@@ -399,7 +568,7 @@ export default function AdminHomeScreen() {
               <View
                 style={[
                   styles.greenDot,
-                  { backgroundColor: isBarberActive ? '#188E1C' : '#9E9E9E' },
+                  { backgroundColor: specialists.some((s) => s.activo) ? '#188E1C' : '#9E9E9E' },
                 ]}
               />
               <Text style={styles.barbersHeaderTitle}>
@@ -409,44 +578,70 @@ export default function AdminHomeScreen() {
 
             <View style={styles.activeBarbersBadge}>
               <Text style={styles.activeBarbersBadgeText}>
-                {isBarberActive ? '1 de 2 activos' : '0 de 2 activos'}
+                {specialists.length > 0
+                  ? `${specialists.filter((s) => s.activo).length} de ${specialists.length} activos`
+                  : '0 activos'}
               </Text>
             </View>
           </View>
 
-          {/* Subcard del Barbero */}
-          <View style={styles.barberSubCard}>
-            <View style={styles.barberAvatarCircle}>
-              <Text style={styles.barberAvatarText}>DT</Text>
-              <View
-                style={[
-                  styles.barberStatusDot,
-                  { backgroundColor: isBarberActive ? '#188E1C' : '#9E9E9E' },
-                ]}
-              />
-            </View>
+          {/* Subcard del Barbero o Estado Vacío */}
+          {specialists.length > 0 ? (
+            specialists.map((spec) => (
+              <View key={spec.id} style={styles.barberSubCard}>
+                <View style={styles.barberAvatarCircle}>
+                  <Text style={styles.barberAvatarText}>
+                    {`${spec.nombre?.[0] || 'B'}${spec.apellido?.[0] || ''}`.toUpperCase()}
+                  </Text>
+                  <View
+                    style={[
+                      styles.barberStatusDot,
+                      { backgroundColor: spec.activo ? '#188E1C' : '#9E9E9E' },
+                    ]}
+                  />
+                </View>
 
-            <View style={styles.barberInfoCol}>
-              <Text style={[styles.barberName, { color: colors.textPrimary }]}>
-                Diego Tejeda
-              </Text>
-              <Text style={[styles.barberSubtitle, { color: colors.textSecondary }]}>
-                {isBarberActive ? 'Disponible para citas hoy' : 'Fuera de turno'}
-              </Text>
-            </View>
+                <View style={styles.barberInfoCol}>
+                  <Text style={[styles.barberName, { color: colors.textPrimary }]}>
+                    {`${spec.nombre} ${spec.apellido || ''}`.trim()}
+                  </Text>
+                  <Text style={[styles.barberSubtitle, { color: colors.textSecondary }]}>
+                    {spec.activo ? (spec.especialidad || 'Disponible para citas hoy') : 'Fuera de turno'}
+                  </Text>
+                </View>
 
-            <TouchableOpacity
-              onPress={() => setIsBarberActive((prev) => !prev)}
-              activeOpacity={0.8}
-              style={[
-                styles.turnButton,
-                { backgroundColor: isBarberActive ? '#2E9D47' : '#9E9E9E' },
-              ]}>
-              <Text style={styles.turnButtonText}>
-                {isBarberActive ? 'En turno' : 'Pausado'}
+                <TouchableOpacity
+                  onPress={() => {
+                    setSpecialists((prev) =>
+                      prev.map((s) => (s.id === spec.id ? { ...s, activo: !s.activo } : s))
+                    );
+                  }}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.turnButton,
+                    { backgroundColor: spec.activo ? '#2E9D47' : '#9E9E9E' },
+                  ]}>
+                  <Text style={styles.turnButtonText}>
+                    {spec.activo ? 'En turno' : 'Pausado'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <View style={{ paddingVertical: 14, alignItems: 'center', gap: 6 }}>
+              <Text style={[{ fontSize: 13, color: colors.textSecondary, textAlign: 'center' }]}>
+                Aún no has registrado profesionales en tu equipo.
               </Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={() => setIsSetupGuideOpen(true)}
+                activeOpacity={0.8}
+                style={{ paddingVertical: 4, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'rgba(212,175,55,0.2)' }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#BA8609' }}>
+                  + Agregar Barbero
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Sección: Cronograma de Hoy */}
@@ -903,7 +1098,7 @@ export default function AdminHomeScreen() {
                   </Text>
                 </View>
                 <Text style={styles.bloqueoDateHint}>
-                  Mostrando: {blockDayIndex === 0 ? 'Hoy' : AGENDA_DAYS[blockDayIndex]?.dayName + ' ' + AGENDA_DAYS[blockDayIndex]?.dayNumber}
+                  Mostrando: {blockDayIndex === 0 ? 'Hoy' : agendaDays[blockDayIndex]?.dayName + ' ' + agendaDays[blockDayIndex]?.dayNumber}
                 </Text>
               </View>
 
@@ -912,7 +1107,7 @@ export default function AdminHomeScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.bloqueoDaysRow}>
-                {AGENDA_DAYS.map((day, idx) => {
+                {agendaDays.map((day, idx) => {
                   const isSelected = blockDayIndex === idx;
                   return (
                     <TouchableOpacity
@@ -1071,9 +1266,9 @@ export default function AdminHomeScreen() {
               <TouchableOpacity
                 onPress={() => {
                   setIsBlockModalVisible(false);
-                  Alert.alert(
+                  showSuccess(
                     'Turno Bloqueado',
-                    `Se ha bloqueado "${blockReason}" (${blockTime}) para ${AGENDA_DAYS[blockDayIndex]?.dayName} ${AGENDA_DAYS[blockDayIndex]?.dayNumber}.`
+                    `Se ha bloqueado "${blockReason}" (${blockTime}) para ${agendaDays[blockDayIndex]?.dayName} ${agendaDays[blockDayIndex]?.dayNumber}.`
                   );
                 }}
                 activeOpacity={0.88}
@@ -1161,12 +1356,28 @@ export default function AdminHomeScreen() {
 
             {/* Botón Guardar Jornada */}
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
+                if (business?.id) {
+                  try {
+                    const daysMap = [1, 2, 3, 4, 5, 6, 0];
+                    const payload = jornadaDays.map((d, idx) => ({
+                      dia_semana: daysMap[idx],
+                      hora_apertura: d.active ? d.hora_apertura : null,
+                      hora_cierre: d.active ? d.hora_cierre : null,
+                      cerrado: !d.active,
+                    }));
+                    await businessService.saveBusinessHours(business.id, payload);
+                    showSuccess(
+                      'Jornada Guardada',
+                      'La configuración de jornada semanal ha sido actualizada exitosamente.'
+                    );
+                  } catch (err: any) {
+                    showError('Error al guardar', err?.message || 'No se pudo guardar la jornada.');
+                  }
+                } else {
+                  showWarning('Aviso', 'Configura tu local primero para guardar los horarios.');
+                }
                 setIsJornadaModalVisible(false);
-                Alert.alert(
-                  'Jornada Guardada',
-                  'La configuración de jornada semanal ha sido actualizada exitosamente.'
-                );
               }}
               activeOpacity={0.88}
               style={[styles.jornadaSaveBtn, Shadows.goldButtonDrop]}>
@@ -1175,6 +1386,56 @@ export default function AdminHomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Guía de Configuración de Negocio */}
+      <BusinessSetupGuideModal
+        visible={isSetupGuideOpen}
+        onClose={() => setIsSetupGuideOpen(false)}
+        userId={user?.id || ''}
+        initialBusiness={business}
+        onCompleted={async () => {
+          if (user?.id) {
+            const biz = await businessService.getBusinessByOwnerId(user.id);
+            if (biz) {
+              setBusiness(biz);
+              const [rawAppointments, rawSpecs] = await Promise.all([
+                appointmentService.getBusinessAppointments(biz.id),
+                businessService.getSpecialists(biz.id),
+              ]);
+              if (rawSpecs) setSpecialists(rawSpecs);
+              if (rawAppointments) {
+                const freshDays = generateAgendaDays();
+                const mapped: AdminAppointment[] = rawAppointments.map((a: Appointment) => {
+                  const dayIdx = freshDays.findIndex((d) => d.isoDate === a.fecha);
+                  const statusMap: Record<string, AppointmentStatus> = {
+                    PENDIENTE: 'pendiente',
+                    CONFIRMADA: 'en_curso',
+                    COMPLETADA: 'completada',
+                    CANCELADA: 'cancelada',
+                    NO_ASISTIO: 'no_asistio',
+                  };
+                  return {
+                    id: a.id,
+                    clientName: a.client ? `${a.client.nombre} ${a.client.apellido || ''}`.trim() : 'Cliente',
+                    service: 'Servicio Flowtime',
+                    time: a.hora_inicio ? a.hora_inicio.slice(0, 5) : '12:00 PM',
+                    price: Number(a.precio_total) || 300,
+                    note: a.notas || '',
+                    status: statusMap[a.estado] || 'pendiente',
+                    barberName: a.specialist ? `${a.specialist.nombre}` : 'Especialista',
+                    dayIndex: dayIdx !== -1 ? dayIdx : 0,
+                  };
+                });
+                freshDays.forEach((d, idx) => {
+                  d.appointmentsCount = mapped.filter((app) => app.dayIndex === idx).length;
+                });
+                setAgendaDays(freshDays);
+                setAppointments(mapped);
+              }
+            }
+          }
+        }}
+      />
 
       {/* Barra de Navegación Inferior (Admin) */}
       <AdminBottomNav currentTab="home" />

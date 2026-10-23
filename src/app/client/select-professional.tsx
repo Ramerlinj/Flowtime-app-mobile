@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { businessService, Specialist } from '@/api/business.service';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 
@@ -25,27 +26,13 @@ interface ProfessionalOption {
   isAny?: boolean;
 }
 
-const PROFESSIONALS: ProfessionalOption[] = [
+const DEFAULT_PROFESSIONALS: ProfessionalOption[] = [
   {
     id: 'any',
-    name: 'Seleccionar cualquier',
-    subtitle: 'Disponible para citas hoy',
+    name: 'Cualquier profesional disponible',
+    subtitle: 'Asignación automática según el turno',
     isAvailable: true,
     isAny: true,
-  },
-  {
-    id: 'diego',
-    name: 'Diego Tejeda',
-    subtitle: 'Disponible para citas hoy',
-    initials: 'DT',
-    isAvailable: true,
-  },
-  {
-    id: 'julio',
-    name: 'Julio Martinéz',
-    subtitle: 'No está disponible',
-    initials: 'JM',
-    isAvailable: false,
   },
 ];
 
@@ -55,17 +42,49 @@ export default function SelectProfessionalScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
 
-  // Por defecto "any" ("Seleccionar cualquier") está seleccionado como en el mockup
+  const businessId = (params.businessId as string) || '';
+
   const [selectedProfId, setSelectedProfId] = useState<string>('any');
+  const [professionalsList, setProfessionalsList] = useState<ProfessionalOption[]>(DEFAULT_PROFESSIONALS);
+
+  useEffect(() => {
+    async function loadSpecialists() {
+      if (!businessId || businessId === 'kenys' || businessId === 'vintage') {
+        return;
+      }
+      try {
+        const specs = await businessService.getSpecialists(businessId);
+        if (specs && specs.length > 0) {
+          const mapped: ProfessionalOption[] = [
+            {
+              id: 'any',
+              name: 'Cualquier profesional disponible',
+              subtitle: 'Asignación automática según el turno',
+              isAvailable: true,
+              isAny: true,
+            },
+            ...specs.map((s: Specialist) => ({
+              id: s.id,
+              name: `${s.nombre} ${s.apellido || ''}`.trim(),
+              subtitle: s.activo ? (s.especialidad || 'Disponible para citas') : 'No disponible hoy',
+              initials: `${s.nombre?.[0] || 'B'}${s.apellido?.[0] || ''}`.toUpperCase(),
+              isAvailable: s.activo !== false,
+            })),
+          ];
+          setProfessionalsList(mapped);
+        }
+      } catch (err) {
+        console.error('Error loading specialists:', err);
+      }
+    }
+    loadSpecialists();
+  }, [businessId]);
 
   const totalPrice = params.totalPrice ? params.totalPrice.toString() : '700';
   const totalDuration = params.totalDuration ? params.totalDuration.toString() : '40';
   const count = params.count ? params.count.toString() : '1';
-  const serviceName = params.serviceName
-    ? params.serviceName.toString()
-    : 'Corte y barba o afeitado';
 
-  const selectedProfessional = PROFESSIONALS.find((p) => p.id === selectedProfId);
+  const selectedProfessional = professionalsList.find((p) => p.id === selectedProfId);
 
   const handleContinue = () => {
     if (!selectedProfId) return;
@@ -77,8 +96,8 @@ export default function SelectProfessionalScreen() {
         professionalId: selectedProfId,
         professionalName:
           selectedProfId === 'any'
-            ? 'Cualquier barbero'
-            : selectedProfessional?.name || 'Diego Tejeda',
+            ? 'Cualquier profesional'
+            : selectedProfessional?.name || 'Profesional asignado',
       },
     });
   };
@@ -126,7 +145,7 @@ export default function SelectProfessionalScreen() {
           },
         ]}
         showsVerticalScrollIndicator={false}>
-        {PROFESSIONALS.map((prof) => {
+        {professionalsList.map((prof) => {
           const isSelected = selectedProfId === prof.id;
 
           return (

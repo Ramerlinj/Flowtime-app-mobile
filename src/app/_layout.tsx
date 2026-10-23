@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { AlertProvider } from '@/context/AlertContext';
 
 // Permite completar sesiones de autenticación web/OAuth al retornar a la app
 WebBrowser.maybeCompleteAuthSession();
@@ -21,19 +22,21 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade',
-            }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="admin" options={{ headerShown: false }} />
-            <Stack.Screen name="client" options={{ headerShown: false }} />
-            <Stack.Screen name="home" options={{ headerShown: false }} />
-          </Stack>
-        </AuthProvider>
+        <AlertProvider>
+          <AuthProvider>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                animation: 'fade',
+              }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="admin" options={{ headerShown: false }} />
+              <Stack.Screen name="client" options={{ headerShown: false }} />
+              <Stack.Screen name="home" options={{ headerShown: false }} />
+            </Stack>
+          </AuthProvider>
+        </AlertProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

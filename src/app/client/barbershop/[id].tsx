@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,17 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert,
   Share,
   Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { useAlert } from '@/context/AlertContext';
+import { businessService, Business, Specialist } from '@/api/business.service';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 
@@ -48,22 +49,7 @@ interface Professional {
   rating: string;
 }
 
-const PROFESSIONALS: Professional[] = [
-  {
-    id: '1',
-    initials: 'DT',
-    name: 'Diego Tejeda',
-    specialty: 'Fade master y Barba',
-    rating: '5.0',
-  },
-  {
-    id: '2',
-    initials: 'JM',
-    name: 'Julio Martinéz',
-    specialty: 'Fade master y Barba',
-    rating: '5.0',
-  },
-];
+const DEFAULT_PROFESSIONALS: Professional[] = [];
 
 interface ReviewItem {
   id: string;
@@ -106,31 +92,48 @@ export default function BarbershopDetailScreen() {
   const { id } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { showInfo } = useAlert();
   const [isFavorite, setIsFavorite] = useState(false);
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [specialists, setSpecialists] = useState<Specialist[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!id || id === 'kenys' || id === 'vintage') return;
+      try {
+        const [biz, specs] = await Promise.all([
+          businessService.getBusinessById(id as string),
+          businessService.getSpecialists(id as string),
+        ]);
+        if (biz) setBusiness(biz);
+        if (specs && specs.length > 0) setSpecialists(specs);
+      } catch (err) {
+        console.error('Error loading business detail:', err);
+      }
+    }
+    loadData();
+  }, [id]);
 
   const handleBooking = () => {
     router.push({
       pathname: '/client/services',
-      params: { id: id || 'kenys' },
+      params: { id: business?.id || (id as string) || 'kenys' },
     });
   };
 
   const handleLeaveReview = () => {
-    Alert.alert(
+    showInfo(
       'Escribir Reseña',
-      'Califica tu experiencia y deja un comentario sobre Keny\'s Barbershop.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Enviar', style: 'default' },
-      ]
+      'La calificación y comentarios estarán habilitados una vez completada tu cita.'
     );
   };
 
   const handleShare = async () => {
     try {
       await Share.share({
-        message:
-          "¡Te recomiendo Keny's Barbershop en Flowtime! Cra 11 #93-18, Santo Domingo.",
+        message: `¡Te recomiendo ${business?.nombre_comercial || "Keny's Barbershop"} en Flowtime! ${
+          business?.direccion || 'Cra 11 #93-18, Santo Domingo.'
+        }`,
       });
     } catch {
       // Ignorar cancelación de compartir
@@ -139,9 +142,40 @@ export default function BarbershopDetailScreen() {
 
   const handleOpenLink = (url: string) => {
     Linking.openURL(url).catch(() => {
-      Alert.alert('Contacto', `Enlace: ${url}`);
+      showInfo('Contacto', `Enlace: ${url}`);
     });
   };
+
+  const displayTitle = business?.nombre_comercial || 'Barbería Flowtime';
+  const displayHero = business?.foto_portada || business?.foto_perfil || HERO_IMAGE;
+  const displayAddress = business?.direccion
+    ? `${business.direccion}${business.ciudad ? ', ' + business.ciudad : ''}`
+    : 'Dirección física por confirmar';
+  const displayPhone = business?.telefono || 'Sin teléfono';
+  const displayInstagram = business?.instagram
+    ? business.instagram.startsWith('@')
+      ? business.instagram
+      : `@${business.instagram}`
+    : '';
+  const displayTiktok = business?.tiktok
+    ? business.tiktok.startsWith('@')
+      ? business.tiktok
+      : `@${business.tiktok}`
+    : '';
+  const displayDesc =
+    business?.descripcion ||
+    'Local de cuidado personal y estilo profesional registrado en Flowtime.';
+
+  const activeProfessionals =
+    specialists.length > 0
+      ? specialists.map((s) => ({
+          id: s.id,
+          initials: `${s.nombre?.[0] || 'B'}${s.apellido?.[0] || ''}`.toUpperCase(),
+          name: `${s.nombre} ${s.apellido || ''}`.trim(),
+          specialty: s.especialidad || 'Especialista en Estilo',
+          rating: '5.0',
+        }))
+      : DEFAULT_PROFESSIONALS;
 
   return (
     <View style={styles.container}>
@@ -167,7 +201,7 @@ export default function BarbershopDetailScreen() {
         {/* Cabecera Hero con Imagen y Botones Flotantes */}
         <View style={styles.heroWrapper}>
           <Image
-            source={{ uri: HERO_IMAGE }}
+            source={{ uri: displayHero }}
             style={styles.heroImage}
             contentFit="cover"
           />
@@ -202,8 +236,10 @@ export default function BarbershopDetailScreen() {
 
           {/* Información del negocio sobre la imagen hero */}
           <View style={styles.heroTextContainer}>
-            <Text style={styles.businessTitle}>Keny's Barbershop</Text>
-            <Text style={styles.businessOwner}>A cargo de: Keny Herrera</Text>
+            <Text style={styles.businessTitle}>{displayTitle}</Text>
+            <Text style={styles.businessOwner}>
+              {business ? `Local verificado: ${business.nombre_comercial}` : 'A cargo de: Keny Herrera'}
+            </Text>
           </View>
         </View>
 
@@ -273,12 +309,7 @@ export default function BarbershopDetailScreen() {
               Shadows.drop,
             ]}>
             <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
-              Keny's Barbershop es más que un corte de pelo: es un ritual. Fusionamos la
-              barbería de la vieja escuela con las mejores técnicas actuales para
-              ofrecerte una experiencia de cuidado masculino sin prisas. Desde un
-              perfilado de barba con toalla caliente hasta un estilo clásico impecable,
-              en nuestras sillas encuentras el espacio ideal para desconectar, tomar
-              algo y salir con tu mejor versión.
+              {displayDesc}
             </Text>
           </View>
 
@@ -301,7 +332,7 @@ export default function BarbershopDetailScreen() {
                   Dirección física del local
                 </Text>
                 <Text style={[styles.addressValue, { color: colors.textPrimary }]}>
-                  Cra 11 #93-18, Santo Domingo
+                  {displayAddress}
                 </Text>
               </View>
             </View>
@@ -312,7 +343,7 @@ export default function BarbershopDetailScreen() {
             </Text>
 
             <TouchableOpacity
-              onPress={() => handleOpenLink('tel:+18290000000')}
+              onPress={() => handleOpenLink(`tel:${displayPhone.replace(/[^0-9+]/g, '')}`)}
               activeOpacity={0.7}
               style={styles.contactRow}>
               <Ionicons
@@ -323,12 +354,12 @@ export default function BarbershopDetailScreen() {
               />
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>
                 WhatsApp / Tel:{' '}
-                <Text style={styles.contactValueWhatsApp}>+1 (829)-000-0000</Text>
+                <Text style={styles.contactValueWhatsApp}>{displayPhone}</Text>
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleOpenLink('https://instagram.com/kenysbarbershop')}
+              onPress={() => handleOpenLink(`https://instagram.com/${displayInstagram.replace('@', '')}`)}
               activeOpacity={0.7}
               style={styles.contactRow}>
               <Ionicons
@@ -339,12 +370,12 @@ export default function BarbershopDetailScreen() {
               />
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>
                 Instagram:{' '}
-                <Text style={styles.contactValueInstagram}>@kenysbarbershop</Text>
+                <Text style={styles.contactValueInstagram}>{displayInstagram}</Text>
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleOpenLink('https://tiktok.com/@keny_style')}
+              onPress={() => handleOpenLink(`https://tiktok.com/@${displayTiktok.replace('@', '')}`)}
               activeOpacity={0.7}
               style={styles.contactRow}>
               <Ionicons
@@ -355,7 +386,7 @@ export default function BarbershopDetailScreen() {
               />
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>
                 Tiktok:{' '}
-                <Text style={styles.contactValueTiktok}>@keny_style</Text>
+                <Text style={styles.contactValueTiktok}>{displayTiktok}</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -415,41 +446,49 @@ export default function BarbershopDetailScreen() {
             </View>
 
             <View style={styles.professionalsRow}>
-              {PROFESSIONALS.map((prof) => (
-                <View
-                  key={prof.id}
-                  style={[
-                    styles.professionalCard,
-                    {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5EEDD',
-                    },
-                    Shadows.drop,
-                  ]}>
-                  {/* Círculo con Iniciales */}
-                  <View style={styles.initialsCircle}>
-                    <Text style={styles.initialsText}>{prof.initials}</Text>
-                  </View>
+              {activeProfessionals.length > 0 ? (
+                activeProfessionals.map((prof) => (
+                  <View
+                    key={prof.id}
+                    style={[
+                      styles.professionalCard,
+                      {
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F5EEDD',
+                      },
+                      Shadows.drop,
+                    ]}>
+                    {/* Círculo con Iniciales */}
+                    <View style={styles.initialsCircle}>
+                      <Text style={styles.initialsText}>{prof.initials}</Text>
+                    </View>
 
-                  <Text
-                    style={[styles.professionalName, { color: colors.textPrimary }]}
-                    numberOfLines={1}>
-                    {prof.name}
-                  </Text>
-                  <Text
-                    style={[styles.professionalSpecialty, { color: colors.textSecondary }]}
-                    numberOfLines={1}>
-                    {prof.specialty}
-                  </Text>
-
-                  {/* Rating con estrella */}
-                  <View style={styles.professionalRatingRow}>
-                    <Ionicons name="star" size={12} color="#E9A83A" />
-                    <Text style={[styles.professionalRatingText, { color: colors.textPrimary }]}>
-                      {prof.rating}
+                    <Text
+                      style={[styles.professionalName, { color: colors.textPrimary }]}
+                      numberOfLines={1}>
+                      {prof.name}
                     </Text>
+                    <Text
+                      style={[styles.professionalSpecialty, { color: colors.textSecondary }]}
+                      numberOfLines={1}>
+                      {prof.specialty}
+                    </Text>
+
+                    {/* Rating con estrella */}
+                    <View style={styles.professionalRatingRow}>
+                      <Ionicons name="star" size={12} color="#E9A83A" />
+                      <Text style={[styles.professionalRatingText, { color: colors.textPrimary }]}>
+                        {prof.rating}
+                      </Text>
+                    </View>
                   </View>
+                ))
+              ) : (
+                <View style={{ width: '100%', paddingVertical: 14, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                    No hay profesionales registrados actualmente en este local.
+                  </Text>
                 </View>
-              ))}
+              )}
             </View>
           </View>
 
@@ -540,7 +579,7 @@ export default function BarbershopDetailScreen() {
           {/* Botón Ver todas las opiniones */}
           <TouchableOpacity
             onPress={() =>
-              Alert.alert(
+              showInfo(
                 'Todas las Reseñas',
                 'Mostrando 184 opiniones verificadas de clientes de Keny\'s Barbershop.'
               )

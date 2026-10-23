@@ -48,6 +48,78 @@ export const authService = {
   },
 
   /**
+   * Actualizar campos del perfil en public.profiles
+   */
+  async updateProfile(
+    userId: string,
+    updates: {
+      name?: string;
+      lastName?: string;
+      phone?: string | null;
+      avatarUrl?: string | null;
+      role?: any;
+    }
+  ): Promise<User | null> {
+    const dbUpdates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (updates.name !== undefined) dbUpdates.nombre = updates.name.trim();
+    if (updates.lastName !== undefined) dbUpdates.apellido = updates.lastName.trim();
+    if (updates.phone !== undefined) dbUpdates.telefono = updates.phone;
+    if (updates.avatarUrl !== undefined) dbUpdates.foto_perfil = updates.avatarUrl;
+    if (updates.role !== undefined) dbUpdates.rol = updates.role;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(dbUpdates)
+      .eq('id', userId)
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      // Si el perfil no existía, crear con upsert
+      const { data: upsertData, error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          nombre: updates.name || '',
+          apellido: updates.lastName || '',
+          telefono: updates.phone || null,
+          foto_perfil: updates.avatarUrl || null,
+          rol: updates.role || 'CLIENTE',
+        })
+        .select('*')
+        .single();
+
+      if (upsertErr || !upsertData) {
+        throw new Error(upsertErr?.message || error?.message || 'Error al actualizar perfil.');
+      }
+
+      return {
+        id: upsertData.id,
+        name: upsertData.nombre,
+        lastName: upsertData.apellido,
+        email: '',
+        role: upsertData.rol,
+        phone: upsertData.telefono,
+        avatarUrl: upsertData.foto_perfil,
+        createdAt: upsertData.created_at,
+      };
+    }
+
+    return {
+      id: data.id,
+      name: data.nombre,
+      lastName: data.apellido,
+      email: '',
+      role: data.rol,
+      phone: data.telefono,
+      avatarUrl: data.foto_perfil,
+      createdAt: data.created_at,
+    };
+  },
+
+  /**
    * Iniciar sesión con email y contraseña en Supabase
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {

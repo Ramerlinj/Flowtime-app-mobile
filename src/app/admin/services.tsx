@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,15 +8,19 @@ import {
   StatusBar,
   Modal,
   TextInput,
-  Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { useAuth } from '@/context/AuthContext';
+import { useAlert } from '@/context/AlertContext';
+import { businessService } from '@/api/business.service';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 import { CustomSwitch } from '@/components/common/CustomSwitch';
@@ -35,7 +39,7 @@ const INITIAL_SERVICES: ServiceItem[] = [
   {
     id: '1',
     name: 'Taper Fade',
-    description: 'Descripción',
+    description: 'Corte tradicional degradado y perfilado',
     duration: '30 min',
     price: 300,
     active: true,
@@ -43,10 +47,10 @@ const INITIAL_SERVICES: ServiceItem[] = [
   {
     id: '2',
     name: 'Barba',
-    description: 'Descripción',
+    description: 'Perfilado y toalla caliente',
     duration: '30 min',
     price: 250,
-    active: false,
+    active: true,
   },
 ];
 
@@ -54,8 +58,13 @@ export default function AdminServicesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { user } = useAuth();
+  const { showWarning, showSuccess, showError, showConfirm } = useAlert();
 
   const [services, setServices] = useState<ServiceItem[]>(INITIAL_SERVICES);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Modales de Crear / Editar
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,13 +73,104 @@ export default function AdminServicesScreen() {
   const [formPrice, setFormPrice] = useState('');
   const [formDuration, setFormDuration] = useState('30 min');
   const [formDescription, setFormDescription] = useState('Descripción');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchServicesData = async (bIdParam?: string | null) => {
+    try {
+      let bId = bIdParam || businessId;
+      if (!bId && user?.id) {
+        const b = await businessService.getBusinessByOwnerId(user.id);
+        if (b) {
+          bId = b.id;
+          setBusinessId(b.id);
+        } else {
+          setBusinessId(null);
+          setServices([]);
+        }
+      }
+
+      if (bId) {
+        const list = await businessService.getAllServicesForAdmin(bId);
+        setServices(
+          list.map((s) => ({
+            id: s.id,
+            name: s.nombre,
+            description: s.descripcion || 'Descripción',
+            duration: `${s.duracion_minutos} min`,
+            price: Number(s.precio),
+            active: s.activo,
+          }))
+        );
+      } else {
+        setServices([]);
+      }
+    } catch (e) {
+      console.warn('[AdminServices] Error al sincronizar servicios:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      let bId = businessId;
+      if (!bId && user?.id) {
+        const b = await businessService.getBusinessByOwnerId(user.id);
+        if (b && isMounted) {
+          bId = b.id;
+          setBusinessId(b.id);
+        } else if (isMounted) {
+          setBusinessId(null);
+          setServices([]);
+        }
+      }
+
+      if (bId) {
+        const list = await businessService.getAllServicesForAdmin(bId);
+        if (isMounted) {
+          setServices(
+            list.map((s) => ({
+              id: s.id,
+              name: s.nombre,
+              description: s.descripcion || 'Descripción',
+              duration: `${s.duracion_minutos} min`,
+              price: Number(s.precio),
+              active: s.activo,
+            }))
+          );
+        }
+      } else if (isMounted) {
+        setServices([]);
+      }
+      if (isMounted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, businessId]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchServicesData();
+  };
 
   const activeCount = services.filter((s) => s.active).length;
 
-  const handleToggleActive = (id: string, newActive: boolean) => {
+  const handleToggleActive = async (id: string, newActive: boolean) => {
     setServices((prev) =>
       prev.map((s) => (s.id === id ? { ...s, active: newActive } : s))
     );
+    try {
+      await businessService.updateService(id, { activo: newActive });
+    } catch (e) {
+      console.warn('[AdminServices] Error al actualizar estado activo:', e);
+    }
   };
 
   const handleOpenCreateModal = () => {
@@ -91,43 +191,101 @@ export default function AdminServicesScreen() {
     setIsModalOpen(true);
   };
 
-  const handleSaveService = () => {
+  const handleDeleteService = (id: string, name: string) => {
+    showConfirm(
+      'Eliminar servicio',
+      `¿Deseas eliminar "${name}" del catálogo?`,
+      async () => {
+        try {
+          await businessService.deleteService(id);
+          setServices((prev) => prev.filter((s) => s.id !== id));
+          showSuccess('Servicio Eliminado', `"${name}" fue removido exitosamente.`);
+        } catch (err: any) {
+          showError('Error', err.message || 'No se pudo eliminar el servicio.');
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        isDestructive: true,
+      }
+    );
+  };
+
+  const handleSaveService = async () => {
     if (!formName.trim() || !formPrice.trim()) {
-      Alert.alert('Datos incompletos', 'Por favor ingresa nombre y precio.');
+      showWarning('Datos incompletos', 'Por favor ingresa nombre y precio.');
       return;
     }
 
     const priceNum = parseFloat(formPrice) || 0;
+    const durNum = parseInt(formDuration.replace(/\D/g, ''), 10) || 30;
 
-    if (editingServiceId) {
-      setServices((prev) =>
-        prev.map((s) =>
-          s.id === editingServiceId
-            ? {
-                ...s,
-                name: formName.trim(),
-                price: priceNum,
-                duration: formDuration,
-                description: formDescription.trim() || 'Descripción',
-              }
-            : s
-        )
-      );
-      Alert.alert('Servicio Actualizado', `El servicio "${formName}" ha sido actualizado.`);
-    } else {
-      const newService: ServiceItem = {
-        id: Date.now().toString(),
-        name: formName.trim(),
-        description: formDescription.trim() || 'Descripción',
-        duration: formDuration,
-        price: priceNum,
-        active: true,
-      };
-      setServices((prev) => [...prev, newService]);
-      Alert.alert('Servicio Creado', `El servicio "${formName}" ha sido añadido al catálogo.`);
+    setIsSubmitting(true);
+    try {
+      if (editingServiceId) {
+        await businessService.updateService(editingServiceId, {
+          nombre: formName.trim(),
+          precio: priceNum,
+          duracion_minutos: durNum,
+          descripcion: formDescription.trim() || 'Descripción',
+        });
+
+        setServices((prev) =>
+          prev.map((s) =>
+            s.id === editingServiceId
+              ? {
+                  ...s,
+                  name: formName.trim(),
+                  price: priceNum,
+                  duration: `${durNum} min`,
+                  description: formDescription.trim() || 'Descripción',
+                }
+              : s
+          )
+        );
+        showSuccess('Servicio Actualizado', `El servicio "${formName}" ha sido actualizado.`);
+      } else {
+        if (businessId) {
+          const created = await businessService.createService({
+            business_id: businessId,
+            nombre: formName.trim(),
+            precio: priceNum,
+            duracion_minutos: durNum,
+            descripcion: formDescription.trim() || 'Descripción',
+          });
+
+          setServices((prev) => [
+            ...prev,
+            {
+              id: created.id,
+              name: created.nombre,
+              description: created.descripcion || 'Descripción',
+              duration: `${created.duracion_minutos} min`,
+              price: Number(created.precio),
+              active: created.activo,
+            },
+          ]);
+        } else {
+          const newService: ServiceItem = {
+            id: Date.now().toString(),
+            name: formName.trim(),
+            description: formDescription.trim() || 'Descripción',
+            duration: `${durNum} min`,
+            price: priceNum,
+            active: true,
+          };
+          setServices((prev) => [...prev, newService]);
+        }
+        showSuccess('Servicio Creado', `El servicio "${formName}" ha sido añadido al catálogo.`);
+      }
+
+      setIsModalOpen(false);
+    } catch (err: any) {
+      showError('Error', err.message || 'No fue posible guardar el servicio.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsModalOpen(false);
   };
 
   return (
@@ -153,6 +311,14 @@ export default function AdminServicesScreen() {
             paddingBottom: insets.bottom + 90,
           },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#BA8609"
+            colors={['#BA8609']}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         {/* Cabecera Superior: Logo Flowtime */}
         <View style={styles.topHeaderRow}>
@@ -184,6 +350,9 @@ export default function AdminServicesScreen() {
 
         {/* Lista de Servicios */}
         <View style={styles.servicesList}>
+          {loading && (
+            <ActivityIndicator size="small" color="#BA8609" style={{ marginVertical: 12 }} />
+          )}
           {services.map((item) => {
             return (
               <View
@@ -255,6 +424,20 @@ export default function AdminServicesScreen() {
                       <Text style={[styles.editButtonText, { color: colors.textSecondary }]}>
                         Editar
                       </Text>
+                    </TouchableOpacity>
+
+                    {/* Botón Eliminar */}
+                    <TouchableOpacity
+                      onPress={() => handleDeleteService(item.id, item.name)}
+                      activeOpacity={0.7}
+                      style={[
+                        styles.deleteButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FDE8E8',
+                          borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#F98080',
+                        },
+                      ]}>
+                      <Ionicons name="trash-outline" size={13} color="#EF4444" />
                     </TouchableOpacity>
                   </View>
 
@@ -394,11 +577,16 @@ export default function AdminServicesScreen() {
             {/* Botón de Guardar */}
             <TouchableOpacity
               onPress={handleSaveService}
+              disabled={isSubmitting}
               activeOpacity={0.88}
-              style={[styles.saveServiceBtn, Shadows.goldButtonDrop]}>
-              <Text style={styles.saveServiceBtnText}>
-                {editingServiceId ? 'Guardar Cambios' : 'Crear Servicio'}
-              </Text>
+              style={[styles.saveServiceBtn, Shadows.goldButtonDrop, isSubmitting && { opacity: 0.7 }]}>
+              {isSubmitting ? (
+                <ActivityIndicator color="#121214" />
+              ) : (
+                <Text style={styles.saveServiceBtnText}>
+                  {editingServiceId ? 'Guardar Cambios' : 'Crear Servicio'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -511,6 +699,15 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: 12.5,
     fontWeight: '600',
+  },
+  deleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
   },
   switchGroup: {
     flexDirection: 'row',

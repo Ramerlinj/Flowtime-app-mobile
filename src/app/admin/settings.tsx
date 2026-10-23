@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useAlert } from '@/context/AlertContext';
 import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
@@ -26,6 +26,7 @@ export default function AdminSettingsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useAppTheme();
   const { user, logout } = useAuth();
+  const { showConfirm } = useAlert();
 
   // Estados de configuración del negocio
   const [currency, setCurrency] = useState<'DOP' | 'USD'>('DOP');
@@ -35,17 +36,19 @@ export default function AdminSettingsScreen() {
   const [slotInterval, setSlotInterval] = useState('30 min');
 
   const handleLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro de que deseas salir de tu cuenta?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar sesión',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/(auth)/login');
-        },
+    showConfirm(
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas salir de tu cuenta?',
+      async () => {
+        await logout();
+        router.replace('/(auth)/login');
       },
-    ]);
+      {
+        confirmText: 'Cerrar sesión',
+        cancelText: 'Cancelar',
+        isDestructive: true,
+      }
+    );
   };
 
   return (

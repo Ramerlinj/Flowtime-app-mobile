@@ -12,6 +12,7 @@ import {
 } from '@/components/common';
 import { useAppTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useAlert } from '@/context/AlertContext';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Typography } from '@/theme/typography';
 import { Validators } from '@/utils/validators';
@@ -20,6 +21,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const { register, loginWithGoogle, isLoading } = useAuth();
+  const { showSuccess } = useAlert();
 
   // Campos limpios al inicio
   const [name, setName] = useState('');
@@ -62,14 +64,23 @@ export default function RegisterScreen() {
     }
 
     try {
-      await register({
+      const response = await register({
         name: cleanName,
         lastName: cleanLastName,
         email: cleanEmail,
         password,
         confirmPassword,
       });
-      router.push('/(auth)/select-role');
+
+      if (response?.token) {
+        router.replace('/(auth)/select-role');
+      } else {
+        showSuccess(
+          '¡Cuenta creada con éxito!',
+          'Te hemos enviado un correo de verificación. Por favor revisa tu bandeja de entrada para activar tu cuenta.',
+          () => router.replace('/(auth)/login')
+        );
+      }
     } catch (error: any) {
       setGeneralError(
         error.message || 'No se pudo crear la cuenta. Por favor intenta de nuevo.'
@@ -81,7 +92,7 @@ export default function RegisterScreen() {
     setGeneralError(null);
     try {
       await loginWithGoogle();
-      router.push('/(auth)/select-role');
+      router.replace('/');
     } catch (error: any) {
       setGeneralError(
         error.message || 'Error al conectar con Google. Por favor intenta de nuevo.'

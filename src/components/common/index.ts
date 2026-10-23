@@ -6,3 +6,5 @@ export * from './FlowButton';
 export * from './GoogleButton';
 export * from './GoogleIcon';
 export * from './Divider';
+export * from './FlowAlertModal';
+export * from './UserAvatar';

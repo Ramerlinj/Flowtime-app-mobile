@@ -9,10 +9,17 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  register: (credentials: RegisterCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<any>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (updates: {
+    name?: string;
+    lastName?: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+    role?: any;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,8 +99,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const response = await authService.register(credentials);
-      setUser(response.user);
-      setAuthToken(response.token);
+      if (response.token) {
+        setUser(response.user);
+        setAuthToken(response.token);
+      }
+      return response;
     } finally {
       setIsLoading(false);
     }
@@ -129,6 +139,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = async (updates: {
+    name?: string;
+    lastName?: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+    role?: any;
+  }) => {
+    if (!user?.id) throw new Error('No hay usuario autenticado.');
+    const updated = await authService.updateProfile(user.id, updates);
+    if (updated) {
+      setUser((prev) => (prev ? { ...prev, ...updated } : updated));
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -140,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithGoogle,
         logout,
         refreshProfile,
+        updateProfile,
       }}>
       {children}
     </AuthContext.Provider>

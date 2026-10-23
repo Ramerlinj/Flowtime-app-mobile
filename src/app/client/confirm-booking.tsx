@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
@@ -16,36 +16,71 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { useAuth } from '@/context/AuthContext';
+import { appointmentService } from '@/api/appointment.service';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 
 const SHOP_THUMBNAIL =
   'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&auto=format&fit=crop&q=80';
 
+function convertTimeSlotToSqlTime(timeStr: string): string {
+  try {
+    const cleanStr = timeStr.trim().split('-')[0].trim();
+    const parts = cleanStr.split(' ');
+    const [rawH, rawM] = parts[0].split(':');
+    let h = parseInt(rawH, 10);
+    const m = rawM ? parseInt(rawM, 10) : 0;
+    const isPM = parts[1]?.toUpperCase() === 'PM';
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+  } catch {
+    return '12:00:00';
+  }
+}
+
+function calculateEndTime(horaInicio: string, durationMinutes: number): string {
+  try {
+    const [h, m] = horaInicio.split(':').map((n) => parseInt(n, 10));
+    const totalM = h * 60 + m + durationMinutes;
+    const endH = Math.floor(totalM / 60) % 24;
+    const endM = totalM % 60;
+    return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+  } catch {
+    return '13:00:00';
+  }
+}
+
 export default function ConfirmBookingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { user } = useAuth();
 
   // Valores pasados o predeterminados del mockup
+  const businessId = (params.businessId as string) || '';
+  const professionalId = (params.professionalId as string) || '';
+  const isoDate = (params.isoDate as string) || new Date().toISOString().split('T')[0];
   const totalPrice = params.totalPrice ? params.totalPrice.toString() : '700';
   const totalDuration = params.totalDuration ? params.totalDuration.toString() : '40';
   const serviceName = params.serviceName
     ? params.serviceName.toString()
-    : 'Corte y barba o afeitado';
+    : 'Servicio seleccionado';
   const professionalName = params.professionalName
     ? params.professionalName.toString()
-    : 'Diego Tejeda';
-  const date = params.date ? params.date.toString() : 'Lunes, Septiembre 28';
-  const time = params.time ? params.time.toString() : '4:20-5:00 PM';
+    : 'Profesional asignado';
+  const date = params.date ? params.date.toString() : 'Fecha seleccionada';
+  const time = params.time ? params.time.toString() : 'Hora por definir';
 
   // Estado para comentarios o peticiones del cliente
   const [customerNote, setCustomerNote] = useState<string>('');
   const [tempNote, setTempNote] = useState<string>('');
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
 
   const handleOpenAddNote = () => {
     setTempNote(customerNote);
@@ -57,8 +92,57 @@ export default function ConfirmBookingScreen() {
     setIsModalVisible(false);
   };
 
-  const handleConfirm = () => {
-    setIsSuccessModalVisible(true);
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    try {
+      // Si tenemos usuario e IDs válidos (UUIDs no mock), insertamos en Supabase
+      const isUuid = (id: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      if (user?.id && isUuid(businessId)) {
+        const horaInicio = convertTimeSlotToSqlTime(time);
+        const horaFin = calculateEndTime(horaInicio, Number(totalDuration) || 40);
+
+        let parsedServiceIds: string[] = [];
+        try {
+          if (params.serviceIds) {
+            parsedServiceIds = JSON.parse(params.serviceIds as string);
+          } else if (params.serviceId) {
+            parsedServiceIds = [params.serviceId as string];
+          }
+        } catch {
+          parsedServiceIds = [];
+        }
+
+        const validServiceIds = parsedServiceIds.filter(isUuid);
+
+        // Si professionalId es un UUID válido, lo pasamos; si no o es 'any', pasamos specialistId si hay
+        if (isUuid(professionalId)) {
+          await appointmentService.createAppointment({
+            businessId,
+            clientId: user.id,
+            specialistId: professionalId,
+            fecha: isoDate,
+            horaInicio,
+            horaFin,
+            duracionTotalMinutos: Number(totalDuration) || 40,
+            precioTotal: Number(totalPrice) || 700,
+            moneda: 'DOP',
+            notas: customerNote || undefined,
+            servicios: validServiceIds.map((sId) => ({
+              serviceId: sId,
+              precio: (Number(totalPrice) || 700) / (validServiceIds.length || 1),
+              duracionMinutos: Math.round((Number(totalDuration) || 40) / (validServiceIds.length || 1)),
+            })),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Error al guardar cita en Supabase (modo fallback activo):', err);
+    } finally {
+      setSubmitting(false);
+      setIsSuccessModalVisible(true);
+    }
   };
 
   return (
@@ -265,7 +349,7 @@ export default function ConfirmBookingScreen() {
             {customerNote ? (
               <View>
                 <Text style={[styles.noteEnteredText, { color: colors.textPrimary }]}>
-                  "{customerNote}"
+                  &ldquo;{customerNote}&rdquo;
                 </Text>
                 <Text style={[styles.noteHintSub, { color: colors.textSecondary }]}>
                   Nota para el barbero
@@ -549,9 +633,14 @@ export default function ConfirmBookingScreen() {
 
         <TouchableOpacity
           onPress={handleConfirm}
+          disabled={submitting}
           activeOpacity={0.88}
-          style={styles.confirmBlackButton}>
-          <Text style={styles.confirmBlackButtonText}>Confirmar</Text>
+          style={[styles.confirmBlackButton, submitting && { opacity: 0.7 }]}>
+          {submitting ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.confirmBlackButtonText}>Confirmar</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>

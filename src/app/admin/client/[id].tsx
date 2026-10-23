@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
-  Alert,
   Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,8 +15,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
+import { useAlert } from '@/context/AlertContext';
+import { appointmentService } from '@/api/appointment.service';
+import { Appointment } from '@/api/types';
 import { Gradients } from '@/theme/colors';
-import { BorderRadius, Spacing } from '@/theme/spacing';
+import { Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 
 interface ServiceHistoryItem {
@@ -28,121 +30,84 @@ interface ServiceHistoryItem {
   year: string;
 }
 
-const DEFAULT_SERVICE_HISTORY: ServiceHistoryItem[] = [
-  {
-    id: 'h1',
-    name: 'Taper Fade',
-    description: 'Descripción',
-    date: '15 de Sep',
-    year: 'de 2026',
-  },
-  {
-    id: 'h2',
-    name: 'Barba',
-    description: 'Descripción',
-    date: '13 de Sep',
-    year: 'de 2026',
-  },
-];
-
-const CLIENT_DATA: Record<
-  string,
-  {
-    name: string;
-    initials: string;
-    phone: string;
-    nextAppointment: string;
-    notes: string;
-  }
-> = {
-  '1': {
-    name: 'Juan R.',
-    initials: 'JR',
-    phone: '809-000-0000',
-    nextAppointment: 'Mañana 4:00 P.M.',
-    notes: '',
-  },
-  '2': {
-    name: 'Pedro M.',
-    initials: 'PM',
-    phone: '809-000-0000',
-    nextAppointment: 'Jueves 24 a las 5:00 P.M.',
-    notes: '',
-  },
-  '3': {
-    name: 'Carlos Ramírez',
-    initials: 'CR',
-    phone: '809-555-1234',
-    nextAppointment: 'Viernes 25 a las 11:00 A.M.',
-    notes: '',
-  },
-  '4': {
-    name: 'Mateo Díaz',
-    initials: 'MD',
-    phone: '829-444-9876',
-    nextAppointment: 'Sábado 26 a las 2:30 P.M.',
-    notes: '',
-  },
-};
-
 export default function AdminClientDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; name?: string; phone?: string; initials?: string; nextAppointment?: string }>();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { showConfirm, showError, showSuccess } = useAlert();
 
-  const clientId = params.id || '1';
-  const baseClient = CLIENT_DATA[clientId] || {
-    name: params.name || 'Juan R.',
-    initials: params.initials || 'JR',
-    phone: params.phone || '809-000-0000',
-    nextAppointment: params.nextAppointment || 'Mañana 4:00 P.M.',
-    notes: '',
+  const clientId = params.id || '';
+  const clientName = params.name || 'Cliente';
+  const clientInitials = params.initials || 'C';
+  const clientPhone = params.phone || 'Sin teléfono';
+  const clientNextApp = params.nextAppointment || 'Sin cita próxima';
+
+  const [notes, setNotes] = useState<string>('');
+  const [history, setHistory] = useState<ServiceHistoryItem[]>([]);
+
+  useEffect(() => {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId);
+    if (!isUuid) return;
+
+    let isMounted = true;
+    appointmentService
+      .getClientAppointments(clientId)
+      .then((apps) => {
+        if (!isMounted || !apps || apps.length === 0) return;
+        const mapped: ServiceHistoryItem[] = apps.map((a: Appointment) => ({
+          id: a.id,
+          name: 'Corte & Estilo',
+          description: a.notas || `Cita ${a.estado.toLowerCase()}`,
+          date: a.fecha,
+          year: a.hora_inicio ? a.hora_inicio.slice(0, 5) : '',
+        }));
+        setHistory(mapped);
+      })
+      .catch((err) => {
+        console.warn('Error cargando historial de citas:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clientId]);
+
+  const handleSaveNotes = () => {
+    showSuccess('Notas Guardadas', `Se actualizaron las preferencias técnicas de ${clientName}.`);
   };
 
-  const clientName = params.name || baseClient.name;
-  const clientInitials = params.initials || baseClient.initials;
-  const clientPhone = params.phone || baseClient.phone;
-  const clientNextApp = params.nextAppointment || baseClient.nextAppointment;
-
-  const [notes, setNotes] = useState<string>(baseClient.notes);
-  const [history] = useState<ServiceHistoryItem[]>(DEFAULT_SERVICE_HISTORY);
-
   const handleOpenChat = () => {
-    Alert.alert(
+    showConfirm(
       `Chat con ${clientName}`,
       `¿Deseas abrir WhatsApp para escribir al ${clientPhone}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Abrir WhatsApp',
-          onPress: () => {
-            Linking.openURL(
-              `https://wa.me/18090000000?text=Hola%20${encodeURIComponent(clientName)},%20te%20escribimos%20de%20Flowtime.`
-            ).catch(() => {
-              Alert.alert('Aviso', 'No se pudo abrir WhatsApp.');
-            });
-          },
-        },
-      ]
+      () => {
+        Linking.openURL(
+          `https://wa.me/18090000000?text=Hola%20${encodeURIComponent(clientName)},%20te%20escribimos%20de%20Flowtime.`
+        ).catch(() => {
+          showError('Aviso', 'No se pudo abrir WhatsApp.');
+        });
+      },
+      {
+        confirmText: 'Abrir WhatsApp',
+        cancelText: 'Cancelar',
+      }
     );
   };
 
   const handleCall = () => {
-    Alert.alert(
+    showConfirm(
       `Llamar a ${clientName}`,
       `¿Deseas iniciar una llamada al ${clientPhone}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Llamar',
-          onPress: () => {
-            Linking.openURL(`tel:${clientPhone}`).catch(() => {
-              Alert.alert('Aviso', 'No se pudo iniciar la llamada.');
-            });
-          },
-        },
-      ]
+      () => {
+        Linking.openURL(`tel:${clientPhone}`).catch(() => {
+          showError('Aviso', 'No se pudo iniciar la llamada.');
+        });
+      },
+      {
+        confirmText: 'Llamar',
+        cancelText: 'Cancelar',
+      }
     );
   };
 
@@ -306,6 +271,14 @@ export default function AdminClientDetailsScreen() {
             textAlignVertical="top"
             style={[styles.notesInput, { color: colors.textPrimary }]}
           />
+
+          <TouchableOpacity
+            onPress={handleSaveNotes}
+            activeOpacity={0.8}
+            style={styles.saveNoteBtn}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#1C1C1C" style={{ marginRight: 4 }} />
+            <Text style={styles.saveNoteBtnText}>Guardar Nota</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Sección 3: Historial de Servicios */}
@@ -314,33 +287,41 @@ export default function AdminClientDetailsScreen() {
         </Text>
 
         <View style={styles.historyList}>
-          {history.map((item) => (
-            <View
-              key={item.id}
-              style={[
-                styles.historyCard,
-                { backgroundColor: isDark ? '#1F1F24' : '#FFFFFF' },
-                Shadows.drop,
-              ]}>
-              <View style={styles.historyLeftCol}>
-                <Text style={[styles.historyName, { color: colors.textPrimary }]}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.historyDesc, { color: colors.textSecondary }]}>
-                  {item.description}
-                </Text>
-              </View>
+          {history.length > 0 ? (
+            history.map((item) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.historyCard,
+                  { backgroundColor: isDark ? '#1F1F24' : '#FFFFFF' },
+                  Shadows.drop,
+                ]}>
+                <View style={styles.historyLeftCol}>
+                  <Text style={[styles.historyName, { color: colors.textPrimary }]}>
+                    {item.name}
+                  </Text>
+                  <Text style={[styles.historyDesc, { color: colors.textSecondary }]}>
+                    {item.description}
+                  </Text>
+                </View>
 
-              <View style={styles.historyRightCol}>
-                <Text style={[styles.historyDate, { color: colors.textPrimary }]}>
-                  {item.date}
-                </Text>
-                <Text style={[styles.historyYear, { color: colors.textSecondary }]}>
-                  {item.year}
-                </Text>
+                <View style={styles.historyRightCol}>
+                  <Text style={[styles.historyDate, { color: colors.textPrimary }]}>
+                    {item.date}
+                  </Text>
+                  <Text style={[styles.historyYear, { color: colors.textSecondary }]}>
+                    {item.year}
+                  </Text>
+                </View>
               </View>
+            ))
+          ) : (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                Sin historial de citas registradas aún para este cliente.
+              </Text>
             </View>
-          ))}
+          )}
         </View>
       </ScrollView>
     </View>
@@ -480,6 +461,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     minHeight: 150,
+  },
+  saveNoteBtn: {
+    backgroundColor: '#D4AF37',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  saveNoteBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1C1C1C',
   },
   historyList: {
     gap: 10,

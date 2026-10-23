@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,14 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert,
+  RefreshControl,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/context/ThemeContext';
-import { Gradients, BrandColors } from '@/theme/colors';
+import { useAlert } from '@/context/AlertContext';
+import { businessService, Service } from '@/api/business.service';
+import { Gradients } from '@/theme/colors';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Shadows } from '@/theme/shadows';
 
@@ -25,45 +27,68 @@ export interface ServiceItem {
   price: number;
 }
 
-const SERVICES_DATA: ServiceItem[] = [
-  {
-    id: '1',
-    name: 'Corte Adulto sin barba',
-    duration: 40,
-    description: 'Solo corte no incluye la barba al afeitarse.',
-    price: 300,
-  },
-  {
-    id: '2',
-    name: 'Corte y barba o afeitado',
-    duration: 50,
-    description: 'Es el corte y el afeitado o barba.',
-    price: 700,
-  },
-  {
-    id: '3',
-    name: 'Cerquillo',
-    duration: 20,
-    description: 'Es el corte y el afeitado o barba.',
-    price: 300,
-  },
-  {
-    id: '4',
-    name: 'Corte de Niños hasta 12 años',
-    duration: 40,
-    description: 'Es el corte y el afeitado o barba.',
-    price: 500,
-  },
-];
-
 export default function SelectServiceScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
+  const { showWarning } = useAlert();
 
-  // Por defecto el servicio 2 ("Corte y barba o afeitado") está seleccionado tal como en el mockup
-  const [selectedIds, setSelectedIds] = useState<string[]>(['2']);
+  const businessId = (params.id as string) || (params.businessId as string) || '';
+
+  const [servicesList, setServicesList] = useState<ServiceItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (businessId && businessId !== 'kenys' && businessId !== 'vintage') {
+      businessService
+        .getServices(businessId)
+        .then((apiServices) => {
+          if (!isMounted || !apiServices || apiServices.length === 0) return;
+          const mapped: ServiceItem[] = apiServices.map((s: Service) => ({
+            id: s.id,
+            name: s.nombre,
+            duration: s.duracion_minutos,
+            description: s.descripcion || '',
+            price: Number(s.precio),
+          }));
+          setServicesList(mapped);
+          setSelectedIds([mapped[0].id]);
+        })
+        .catch((err) => {
+          console.error('Error loading services for business:', err);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [businessId]);
+
+  const onRefresh = async () => {
+    if (!businessId || businessId === 'kenys' || businessId === 'vintage') {
+      return;
+    }
+    setRefreshing(true);
+    try {
+      const apiServices = await businessService.getServices(businessId);
+      if (apiServices && apiServices.length > 0) {
+        const mapped: ServiceItem[] = apiServices.map((s: Service) => ({
+          id: s.id,
+          name: s.nombre,
+          duration: s.duracion_minutos,
+          description: s.descripcion || '',
+          price: Number(s.precio),
+        }));
+        setServicesList(mapped);
+      }
+    } catch (err) {
+      console.error('Error refreshing services:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const toggleService = (id: string) => {
     setSelectedIds((prev) =>
@@ -71,14 +96,14 @@ export default function SelectServiceScreen() {
     );
   };
 
-  const selectedServices = SERVICES_DATA.filter((s) => selectedIds.includes(s.id));
+  const selectedServices = servicesList.filter((s) => selectedIds.includes(s.id));
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
   const count = selectedServices.length;
 
   const handleContinue = () => {
     if (count === 0) {
-      Alert.alert(
+      showWarning(
         'Selecciona un servicio',
         'Por favor selecciona al menos un servicio para poder agendar tu cita.'
       );
@@ -89,7 +114,9 @@ export default function SelectServiceScreen() {
     router.push({
       pathname: '/client/select-professional',
       params: {
+        businessId,
         serviceId: mainService?.id || '2',
+        serviceIds: JSON.stringify(selectedIds),
         serviceName: mainService?.name || 'Corte y barba o afeitado',
         totalPrice: totalPrice.toString(),
         totalDuration: totalDuration.toString(),
@@ -140,65 +167,85 @@ export default function SelectServiceScreen() {
             paddingBottom: insets.bottom + 110,
           },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#C89C25"
+            colors={['#C89C25']}
+          />
+        }
         showsVerticalScrollIndicator={false}>
-        {SERVICES_DATA.map((service) => {
-          const isSelected = selectedIds.includes(service.id);
+        {servicesList.length > 0 ? (
+          servicesList.map((service) => {
+            const isSelected = selectedIds.includes(service.id);
 
-          return (
-            <TouchableOpacity
-              key={service.id}
-              onPress={() => toggleService(service.id)}
-              activeOpacity={0.92}
-              style={[
-                styles.serviceCard,
-                { backgroundColor: colors.card },
-                Shadows.drop,
-              ]}>
-              {/* Título del Servicio */}
-              <Text style={[styles.serviceTitle, { color: colors.textPrimary }]}>
-                {service.name}
-              </Text>
+            return (
+              <TouchableOpacity
+                key={service.id}
+                onPress={() => toggleService(service.id)}
+                activeOpacity={0.92}
+                style={[
+                  styles.serviceCard,
+                  { backgroundColor: colors.card },
+                  Shadows.drop,
+                ]}>
+                {/* Título del Servicio */}
+                <Text style={[styles.serviceTitle, { color: colors.textPrimary }]}>
+                  {service.name}
+                </Text>
 
-              {/* Duración */}
-              <Text style={[styles.serviceDuration, { color: colors.textSecondary }]}>
-                {service.duration} min
-              </Text>
+                {/* Duración */}
+                <Text style={[styles.serviceDuration, { color: colors.textSecondary }]}>
+                  {service.duration} min
+                </Text>
 
-              {/* Descripción */}
-              <Text style={[styles.serviceDescription, { color: colors.textSecondary }]}>
-                {service.description}
-              </Text>
+                {/* Descripción */}
+                <Text style={[styles.serviceDescription, { color: colors.textSecondary }]}>
+                  {service.description}
+                </Text>
 
-              {/* Fila Inferior de la Card: Precio y Botón Seleccionar */}
-              <View style={styles.cardBottomRow}>
-                <Text style={styles.servicePrice}>DOP {service.price}</Text>
+                {/* Fila Inferior de la Card: Precio y Botón Seleccionar */}
+                <View style={styles.cardBottomRow}>
+                  <Text style={styles.servicePrice}>DOP {service.price}</Text>
 
-                {isSelected ? (
-                  <View style={styles.selectedButtonWrapper}>
-                    <LinearGradient
-                      colors={['#B8860B', '#D4AF37']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={[styles.selectedButton, Shadows.drop]}>
-                      <Text style={styles.selectedButtonText}>Seleccionado</Text>
-                    </LinearGradient>
-                  </View>
-                ) : (
-                  <View
-                    style={[
-                      styles.unselectedButton,
-                      {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F2EADC',
-                      },
-                      Shadows.drop,
-                    ]}>
-                    <Text style={styles.unselectedButtonText}>Seleccionar</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+                  {isSelected ? (
+                    <View style={styles.selectedButtonWrapper}>
+                      <LinearGradient
+                        colors={['#B8860B', '#D4AF37']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.selectedButton, Shadows.drop]}>
+                        <Text style={styles.selectedButtonText}>Seleccionado</Text>
+                      </LinearGradient>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.unselectedButton,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F2EADC',
+                        },
+                        Shadows.drop,
+                      ]}>
+                      <Text style={styles.unselectedButtonText}>Seleccionar</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <View style={{ paddingVertical: 48, alignItems: 'center', paddingHorizontal: 24, gap: 10 }}>
+            <Ionicons name="cut-outline" size={40} color="#D4AF37" />
+            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.textPrimary, textAlign: 'center' }}>
+              Sin servicios disponibles
+            </Text>
+            <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+              Este local no tiene servicios activos en este momento.
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Barra Inferior Fija (Sticky Footer de Selección) */}

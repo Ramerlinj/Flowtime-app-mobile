@@ -48,7 +48,7 @@ export default function LoginScreen() {
 
     try {
       await login({ email: cleanEmail, password });
-      router.replace('/(auth)/select-role');
+      router.replace('/');
     } catch (error: any) {
       // Mostrar mensaje de error directamente en pantalla en lugar de modal
       setGeneralError(
@@ -61,7 +61,7 @@ export default function LoginScreen() {
     setGeneralError(null);
     try {
       await loginWithGoogle();
-      router.replace('/(auth)/select-role');
+      router.replace('/');
     } catch (error: any) {
       setGeneralError(
         error.message || 'Error al autenticar con Google. Intenta nuevamente.'

@@ -51,13 +51,14 @@ export function ScreenContainer({
         translucent
       />
 
-      {/* Header fijo arriba (ej. Logo) que no se mueve con el teclado */}
+      {/* Header fijo arriba (ej. Logo) centrado armoniosamente en la zona superior */}
       {header && (
         <View
           style={[
             styles.fixedHeader,
             {
-              paddingTop: Math.max(insets.top, 16) + Spacing.xs,
+              paddingTop: Math.max(insets.top, 16) + Spacing.base,
+              paddingBottom: Spacing.base,
             },
           ]}>
           {header}

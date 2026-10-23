@@ -171,6 +171,7 @@ export interface Appointment {
   updated_at: string;
   business?: Business;
   specialist?: Specialist;
+  client?: Profile;
   services?: Service[];
 }
 
